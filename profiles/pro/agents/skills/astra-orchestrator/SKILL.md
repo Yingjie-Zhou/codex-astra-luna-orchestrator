@@ -3,7 +3,7 @@ name: astra-orchestrator
 description: Orchestrate multi-file, cross-component, ambiguous, or high-risk Codex development with a stable Sol High root, a Luna Max pre-implementation auditor, risk-based R0-R3 routing, specialized Luna/Sol writers and testers, and independent Astra reviews.
 ---
 
-# Sol + Luna + Astra Orchestrator — Pro v2
+# Sol + Luna + Astra Orchestrator — Pro v2.1
 
 The user's explicit instructions and task-specific safety restrictions always
 take precedence.
@@ -23,6 +23,16 @@ mid-thread because prompt-cache continuity is part of the workflow.
 - solver: GPT-5.6 Sol, high — coupled implementation and difficult debugging
 - reviewer: GPT-6 Astra, low, read-only — R2 diff or R3 design review
 - reviewer_high: GPT-6 Astra, high, read-only — independent R3 final review
+
+These are exact custom-agent names, not labels. Always spawn the exact role; a
+requested model/effort does not override that role's TOML. Before consuming a
+child report, run `scripts/pro_guard.py attest` against the exact full
+thread/session ID and rollout JSONL. The guard requires one unambiguous
+`session_meta`, a canonical child `agent_path` of `/root/<exact-role>` (with every
+non-null role field agreeing), or an unambiguous user/root session with no child
+path. Authoritative `turn_context` model/effort must match the selected role TOML.
+Missing, duplicate, malformed, ambiguous, or mismatched evidence blocks. The
+check validates local evidence only; it is not cryptographic or tamper-proof.
 
 ## Auditor gate
 
@@ -75,6 +85,16 @@ Require concise structured reports:
 3. exact validation and result; and
 4. remaining risks or required decisions.
 
+Enforce UTF-8 byte caps before forwarding or recording evidence:
+
+- child report: 8192 bytes
+- forwarded tool excerpt: 20480 bytes
+- root phase or recovery summary: 12288 bytes
+
+Never silently truncate. Oversize material blocks the gate unless replaced with
+a bounded reference containing a canonical repository-contained path, SHA-256,
+and byte count that the guard verifies.
+
 ## Git and checkpoints
 
 At task start inspect status, branch, and HEAD. Work on `codex/<task>`. When
@@ -86,14 +106,26 @@ discarding shared history.
 
 The workflow installer must never create a branch or commit.
 
-For resumable work, use the repository Git directory rather than a tracked file:
+For resumable work, use Python 3.11+ and the bundled standard-library-only guard
+with `policy.json`. Store state in the repository Git directory rather than a
+tracked file:
 
 ```text
 git rev-parse --git-path codex-tasks/<task>/state.json
 ```
 
-Record the risk, phase, branch/HEAD, active child IDs, ownership, completed
-checks, and next action.
+Use the strict phases `draft`, `audited`, `designed`, `implementing`, `testing`,
+`reviewing`, `automated_passed`, `manual_pending`, `complete`, and `blocked`.
+Every mutation uses the transaction lock, atomic replacement, and expected
+revision CAS. Task slugs and canonical containment are validated; linked
+worktrees and paths with spaces are supported; symlink/reparse redirects fail.
+Recovery validates repository identity, branch, HEAD, and status fingerprint.
+Changed evidence makes previous acceptance stale. Candidate acceptance binds
+path, byte size, SHA-256, and dirty fingerprint. Monitoring stores both an
+absolute deadline and finite remaining budget so restart cannot reset either.
+Inherited active children force recovery into blocked reconciliation and prevent
+a new writer until explicitly cleared, while the refreshed repository snapshot
+allows that reconciliation update to proceed.
 
 ## Context and monitoring discipline
 
@@ -124,3 +156,17 @@ build command into this generic workflow.
 Before reporting completion, confirm that required roles finished or explicitly
 failed, material findings were resolved, automated gates passed, and manual
 acceptance is labeled accurately.
+
+Non-desktop tasks may pass automated and complete with no candidate. A manual
+gate requires a bound candidate; moving `manual_pending` to `complete` requires
+`--manual-confirmed` and only follows explicit user confirmation.
+
+## Guard and test ladder
+
+The guard commands are `attest`, `state-init`, `state-record-role`,
+`state-update`, `state-transition`, `state-recover`, `monitor-tick`, and
+`evidence-check`; use
+`--help` for exact arguments. Run guard unit tests first, profile/policy parity
+second, installer syntax/install/upgrade/idempotence third, then the complete
+repository suite. Preserve failing evidence and rerun the affected rung before
+the final suite.
