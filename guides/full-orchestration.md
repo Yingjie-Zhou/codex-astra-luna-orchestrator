@@ -1,54 +1,57 @@
-# Pro Profile: Astra + Luna Orchestration
+# 完整编排：Pro v2
 
-Choose this preset when you want Astra to plan, orchestrate, and review while
-Luna handles the execution roles. Select Pro in `setup.sh` or `setup.ps1`.
-Setup copies `profiles/pro/codex/` to `.codex/` and
-`profiles/pro/agents/` to `.agents/` in the target repository without
-rewriting configuration. For manual installation, copy those same folders
-and the repository's `AGENTS.md` to the target.
-
-The topology is:
+Root 在整个线程固定使用 GPT-5.6 Sol High，负责风险分级、架构、协调、集成和验收。
+不要中途切换 root 模型或推理强度，以保留 prompt cache 连续性。
 
 ```text
-Astra root (medium)
-├── Luna explorer (max)
-├── Luna worker (max)
-├── Luna tester (max)
-├── Luna researcher (max)
-└── Astra reviewer (low)
+Sol root (high)
+├── Luna auditor (max, read-only)       事实挑战、冲突门禁、行为契约
+├── Luna explorer (high, read-only)     仓库取证
+├── Luna worker (max)                   bounded writer
+├── Luna tester (high)                  测试与构建
+├── Luna researcher (high, read-only)   权威资料
+├── Sol solver (high)                   复杂 writer
+├── Astra reviewer (low, read-only)     设计或经济型 diff 审查
+└── Astra reviewer_high (high, read-only) R3 独立终审
 ```
 
-Put the root settings in the project-scoped `.codex/config.toml`, or merge
-them into `~/.codex/config.toml` for a personal/global setup:
+## 实现前事实门禁
 
-```toml
-model = "gpt-6-astra"
-model_reasoning_effort = "medium"
+R1-R3 先由 auditor 独立检查用户事实与拟议修复，并把关键 claim 分类为
+`CONFIRMED`、`PARTIALLY_CONFIRMED`、`CONTRADICTED` 或 `UNKNOWN`。
+报告必须包含证据、`CLEAR/BLOCK`、行为契约和残余不确定性。若机制不能实现期望
+行为、违反现有不变量，或结果依赖被否定/未解决的关键事实，则标记 `BLOCK`；
+root 在用户确认或更强证据出现前不能开始写入。
 
-[agents]
-enabled = true
-max_concurrent_threads_per_session = 4
-default_subagent_model = "gpt-5.6-luna"
-default_subagent_reasoning_effort = "max"
-```
+## 风险路径
 
-For the named roles, use these model settings in the corresponding files under
-`.codex/agents/`:
+- R0：root-only 机械修改与直接验证。
+- R1：auditor -> 单一 bounded writer -> tester -> root。
+- R2：auditor -> explorer -> 单一 worker/solver -> tester -> reviewer DIFF
+  (Astra low) -> root。
+- R3：auditor -> explorer -> reviewer DESIGN (Astra low) -> 单一 Sol solver ->
+  tester -> reviewer_high (Astra high) -> root 与所需人工门禁。
 
-```toml
-# explorer.toml, worker.toml, tester.toml, researcher.toml
-model = "gpt-5.6-luna"
-model_reasoning_effort = "max"
-```
+安全/权限、不可逆操作、公共 API/schema、数据完整性、并发、部署和大影响面应升到
+R3。具体任务的安全限制不会自动成为以后任务的默认规则。
 
-```toml
-# reviewer.toml
-model = "gpt-6-astra"
-model_reasoning_effort = "low"
-```
+## 上下文、Git 与恢复
 
-The role files override the inherited `[agents]` defaults. Keep those explicit
-overrides when you want the topology above to remain stable. Remove them when
-you want all named roles to follow the defaults in `config.toml`.
+每个委派写清目标、范围、约束、验收和文件所有权。子代理只返回结论/证据、改动文件、
+验证和风险。没有基线失效证据时不重复全仓扫描或全量测试；修复后只复查 delta 与
+受影响边界。
 
-For the Luna-root configuration, use the [Plus profile](plus-plan.md).
+任务开始检查 status、branch、HEAD，在 `codex/<task>` 工作。commit 获授权后，
+先检查 staged diff，再提交可逆逻辑检查点；排除 secret、本机配置、二进制、日志、
+build 目录和验收产物；绝不自动 push，优先 revert。安装器没有任何 Git 副作用。
+
+可恢复状态写到 `git rev-parse --git-path codex-tasks/<task>/state.json`，不纳入
+版本控制。优先完成事件和有界等待；只有长于 15 分钟且平台支持时使用 15 分钟
+heartbeat，否则禁止用轮询模拟。
+
+## 验收
+
+自动门禁单独列出测试、lint、build、diff check 的命令和结果。桌面任务需要可运行
+候选时，用目标项目命令构建 EXE，报告绝对路径、构建时间、字节大小与 SHA-256，
+并将产物排除于 Git。`manual acceptance` 在用户运行前是 `pending`，只有用户
+明确确认后才是 `passed`。

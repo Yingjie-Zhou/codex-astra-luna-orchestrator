@@ -1,22 +1,31 @@
-# Complex Repository Work
+# 复杂仓库任务
 
-Choose this preset for architecture changes, difficult debugging, and work
-where higher-confidence reasoning matters more than latency.
+跨文件或组件任务至少按 R2 处理；涉及安全/权限、不可逆操作、公共 API/schema、
+数据完整性、并发、部署或大影响面时按 R3。
 
-This is an optional root override for the [Pro profile](full-orchestration.md),
-whose default is Astra `medium`. It leaves the installed Luna `max` roles
-and Astra `low` reviewer in place. If you adopt this override, update the
-installed skill's root-reasoning wording to match.
+## R2
 
-Add or merge this into:
+1. Luna Max auditor 核对关键事实和修复方案，输出分类 claim 与行为契约；`BLOCK`
+   时停止。
+2. Luna High explorer 找到最小真实实现面。
+3. Root 选择单一 writer：边界清晰用 Luna Max worker，强耦合用 Sol High solver。
+4. Luna High tester 独立验证。
+5. Astra Low reviewer 审查真实 diff，root 集成并验收。
 
-`~/.codex/config.toml`
+## R3
 
-```toml
-model = "gpt-6-astra"
-model_reasoning_effort = "high"
-service_tier = "standard"
-```
+1. auditor 与 explorer 完成事实和代码取证。
+2. Astra Low reviewer 在写入前以 DESIGN 模式挑战设计。
+3. Sol High solver 作为唯一实现者。
+4. Luna High tester 执行目标验证。
+5. 未参与实现的 Astra High `reviewer_high` 做独立终审。
+6. Root 完成自动门禁；需要用户实际运行或主观确认的部分保持
+   `manual acceptance: pending`。
 
-If your Codex version does not support `service_tier`, remove that line and
-keep the model and reasoning settings.
+Root 始终固定为 GPT-5.6 Sol High，不在中途切换模型/推理。任务开始检查 Git
+status、branch、HEAD，在 `codex/<task>` 分支工作；用户授权 commit 时先检查
+staged diff，再做可逆逻辑检查点，绝不自动 push。
+
+状态保存在 Git 目录的 `codex-tasks/<task>/state.json`，不跟踪。每个子任务报告
+结论/证据、文件、验证和风险；不重复未失效的全仓扫描、全量测试或完整 review。
+桌面候选构建需报告 EXE 绝对路径、构建时间、大小和 SHA-256，产物不入 Git。

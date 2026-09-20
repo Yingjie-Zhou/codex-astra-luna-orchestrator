@@ -1,426 +1,126 @@
 ---
 name: astra-orchestrator
-description: Orchestrate complex Codex coding work for the Pro profile with GPT-6 Astra at medium reasoning as planner/integrator, Luna subagents for exploration, implementation, testing, and research, and an Astra reviewer. Use for multi-file features, debugging across components, repo-wide changes, parallelizable workstreams, or whenever the user asks to delegate or use subagents. Do not use for trivial one-file edits or simple questions.
+description: Orchestrate multi-file, cross-component, ambiguous, or high-risk Codex development with a stable Sol High root, a Luna Max pre-implementation auditor, risk-based R0-R3 routing, specialized Luna/Sol writers and testers, and independent Astra reviews.
 ---
 
-# Astra Orchestrator — Pro Profile
+# Sol + Luna + Astra Orchestrator — Pro v2
 
-The user's explicit instructions take precedence over this skill.
+The user's explicit instructions and task-specific safety restrictions always
+take precedence.
 
-## Goal
+## Stable topology
 
-Use the root agent as the high-quality orchestrator.
+Keep the root on GPT-5.6 Sol with high reasoning for the entire thread. The root
+owns risk classification, architecture, decomposition, integration, and final
+acceptance. Never recommend changing the root model or reasoning effort
+mid-thread because prompt-cache continuity is part of the workflow.
 
-Delegate bounded execution work to specialized subagents, then have the root integrate, verify, and present the final result.
+- auditor: GPT-5.6 Luna, max, read-only — independent fact/behavior audit
+- explorer: GPT-5.6 Luna, high, read-only — repository evidence and code paths
+- worker: GPT-5.6 Luna, max — bounded implementation and batch changes
+- tester: GPT-5.6 Luna, high — reproduction, tests, builds, and validation
+- researcher: GPT-5.6 Luna, high, read-only — primary-source technical research
+- solver: GPT-5.6 Sol, high — coupled implementation and difficult debugging
+- reviewer: GPT-6 Astra, low, read-only — R2 diff or R3 design review
+- reviewer_high: GPT-6 Astra, high, read-only — independent R3 final review
 
-The expected default topology is:
+## Auditor gate
 
-- root: GPT-6 Astra at medium reasoning
-- explorer: GPT-5.6 Luna at max reasoning
-- worker: GPT-5.6 Luna at max reasoning
-- tester: GPT-5.6 Luna at max reasoning
-- reviewer: GPT-6 Astra at low reasoning
-- researcher: GPT-5.6 Luna at max reasoning
+Before implementation on R1-R3, the auditor independently challenges material
+user factual assumptions and the proposed fix against repository evidence. It
+classifies each material claim as `CONFIRMED`, `PARTIALLY_CONFIRMED`,
+`CONTRADICTED`, or `UNKNOWN`, then returns:
 
-Use Luna for all routine subagent execution.
+1. a concise claim ledger with evidence;
+2. `CLEAR` or `BLOCK` for the conflict gate;
+3. a behavior contract covering observable behavior, invariants, non-goals, and
+   acceptance evidence; and
+4. residual uncertainty.
 
-This is a requirement, not a preference.
+A semantic conflict is material when the requested mechanism would not produce
+the requested behavior, violates an established invariant, or relies on a
+contradicted/unresolved fact that can change the outcome. A `BLOCK` stops
+implementation until the root resolves it with the user or stronger evidence.
 
-The root and reviewer use Astra; routine execution subagents use Luna.
+## R0-R3 routing
 
-Do not override a Luna subagent to a more expensive model unless the user explicitly asks for escalation or a Luna worker reports that the task requires higher-level reasoning.
+Classify risk by semantics, reversibility, blast radius, and evidence—not only
+diff size.
 
----
+| Risk | Route | Typical scope |
+| --- | --- | --- |
+| R0 mechanical | root only, then direct verification | localized behavior-preserving change |
+| R1 bounded | auditor -> one bounded writer -> tester -> root | contained behavior change with a clear path |
+| R2 cross-file | auditor -> explorer -> one writer -> tester -> reviewer (Astra low) -> root | multi-file/component change or meaningful regression surface |
+| R3 high-risk | auditor -> explorer -> reviewer DESIGN (Astra low) -> solver -> tester -> reviewer_high (Astra high) -> root/manual gate | security, destructive/irreversible, public API/schema, data integrity, concurrency, deployment, or broad blast radius |
 
-## Delegation gate
-
-Before doing substantive repository work, classify the task as either:
-
-- root-only
-- delegated
-
-Use root-only only when the task is genuinely small, localized, and does not materially benefit from independent exploration, implementation, testing, research, or review.
-
-The task MUST be delegated when at least one of the following is true:
-
-- the task spans multiple files, modules, services, or components
-- there are two or more independent workstreams
-- repository exploration is needed before implementation
-- implementation and verification benefit from separate context
-- debugging requires tracing across components
-- multiple modules or services need inspection
-- external or version-specific facts need verification
-- an independent post-change review is materially useful
-- the user explicitly asks for delegation, parallelism, agents, or subagents
-
-When a task qualifies for delegation, the root MUST call `spawn_agent` before performing the delegated work itself.
-
-Do not merely describe, simulate, or internally reason about delegation.
-
-Actual subagents must be spawned.
-
-If `spawn_agent` is unavailable or fails, explicitly report that failure.
-
-Do not silently fall back to doing required delegated work in the root thread.
-
-For every delegated task, spawn at least one subagent.
-
-Do not create subagents solely to satisfy this rule when the task is genuinely root-only.
-
----
-
-## Root-agent responsibilities
-
-The root agent owns:
-
-1. understanding the user's actual goal
-2. choosing the architecture and implementation direction
-3. decomposing the task
-4. deciding which tasks can run in parallel
-5. spawning the appropriate subagents
-6. giving each subagent a bounded contract
-7. resolving conflicting subagent findings
-8. integrating changes
-9. reviewing the final diff
-10. running or coordinating final verification
-11. presenting the final result to the user
-
-Subagents provide evidence and bounded execution.
-
-They do not own the overall direction.
-
-The root must not offload architectural ownership to a subagent.
-
----
-
-## Spawn policy
-
-When spawning agents, use these models by default:
-
-- explorer: `gpt-5.6-luna` at `max` reasoning
-- worker: `gpt-5.6-luna` at `max` reasoning
-- tester: `gpt-5.6-luna` at `max` reasoning
-- researcher: `gpt-5.6-luna` at `max` reasoning
-- reviewer: `gpt-6-astra` at `low` reasoning
-
-The root keeps the Pro profile configuration from `.codex/config.toml`: GPT-6 Astra at medium reasoning. The role files in `.codex/agents/` explicitly set Luna reasoning to `max` and reviewer reasoning to `low`. Preserve those efforts when spawning agents unless the user requests a change. Do not change the root model from within a session.
-
-For every delegated task:
-
-1. call `spawn_agent`
-2. give the agent a descriptive task name using underscores
-3. explicitly specify the intended model
-4. give the subagent a bounded delegation contract
-5. retain the returned task name or identifier
-6. wait for required agents before final synthesis
-
-Do not silently substitute the root agent for a required Luna worker.
-
-Do not spawn Astra workers except for the `reviewer` role unless:
-
-- the user explicitly requests Astra
-- Luna reports a genuinely difficult reasoning blocker
-- the root determines that a high-risk architectural or security review needs Astra
-
-Routine execution should remain on Luna.
-
----
+For R1, the writer is normally `worker`, though the root may write a truly
+small bounded change. For R2, choose `worker` or `solver` based on coupling.
+For R3, the Sol `solver` is the single implementation owner. The low reviewer
+must finish the design review before R3 implementation, and the high reviewer
+must be independent of implementation.
 
 ## Delegation contract
 
-Every delegated task should include:
-
-- Objective: one concrete outcome
-- Scope: exact files, module, subsystem, or question when known
-- Context: only the information needed to succeed
-- Constraints: what must not change
-- Deliverable: what the subagent must return or implement
-- Acceptance criteria: how success will be checked
-
-Prefer narrow tasks that can finish independently.
-
-Bad:
-
-> Fix the backend.
-
-Good:
-
-> Trace where POST /invoices validates currency. Return the responsible files, validation path, and existing tests. Do not edit files.
-
-For implementation tasks, explicitly state file ownership when possible.
-
-For exploration tasks, tell the agent not to edit files.
-
-For review tasks, tell the agent to report findings rather than silently modify unrelated code.
-
----
-
-## Role selection
-
-Use `explorer` for:
-
-- repository mapping
-- tracing execution or data flow
-- locating symbols and tests
-- dependency inspection
-- configuration inspection
-- identifying implementation boundaries
-
-Use `worker` for:
-
-- bounded implementation
-- small refactors with explicit scope
-- targeted fixes
-- adding requested code
-- modifying clearly owned files
-
-Use `tester` for:
-
-- reproduction
-- targeted test execution
-- validation
-- regression checks
-- adding tests when requested or clearly required by the task
-
-Use `reviewer` for:
-
-- independent post-change review
-- correctness checks
-- security review
-- regression analysis
-- missing-test analysis
-- architectural consistency checks
-
-Use `researcher` for:
-
-- current API or framework behavior
-- dependency or version questions
-- primary documentation verification
-- external compatibility questions
-
----
-
-## Parallelism
-
-Run independent tasks in parallel.
-
-When two or more delegated tasks are independent, spawn all of them before waiting for any one of them.
-
-Good parallel set:
-
-1. spawn backend explorer
-2. spawn frontend explorer
-3. spawn API researcher
-4. wait for all three
-5. synthesize findings
-
-Do not do this:
-
-1. spawn backend explorer
-2. wait
-3. spawn frontend explorer
-4. wait
-5. spawn researcher
-6. wait
-
-unless later tasks genuinely depend on earlier results.
-
-Good parallel examples:
-
-- explorer maps backend path
-- explorer maps frontend path
-- researcher verifies external API behavior
-
-Serialize dependent work:
-
-1. explore
-2. decide architecture
-3. implement
-4. test
-5. review
-6. fix material findings
-7. final verification
-
-Do not send multiple workers to edit the same files unless the root explicitly coordinates ownership.
-
-Prefer one writer per file or subsystem.
-
----
-
-## Default coding workflow
-
-For non-trivial implementation tasks, prefer this sequence:
-
-1. spawn one or more Luna explorers if repository understanding is needed
-2. wait for exploration results
-3. root decides implementation direction
-4. spawn Luna worker or workers with bounded ownership
-5. wait for implementation
-6. spawn Luna tester
-7. wait for validation
-8. spawn Astra reviewer when an independent review is materially useful
-9. resolve material findings
-10. run final verification
-11. present the result
-
-Do not spawn every role mechanically.
-
-Use only the roles that materially improve the task.
-
-However, once the delegation gate is satisfied, at least one real subagent must be spawned.
-
----
-
-## Debugging workflow
-
-For cross-component bugs:
-
-1. spawn explorers for independent suspected areas
-2. reproduce the issue when possible
-3. collect evidence before selecting a fix
-4. root determines the likely root cause
-5. assign a bounded Luna worker to implement the fix
-6. assign Luna tester to reproduce the original failure and validate the fix
-7. use Astra reviewer for high-risk or non-obvious fixes
-
-Do not let multiple workers independently attempt competing fixes unless the root intentionally requests alternative approaches.
-
----
-
-## Research workflow
-
-When current or version-specific external information matters:
-
-1. spawn a Luna researcher
-2. require primary or authoritative sources when possible
-3. return concise findings and compatibility implications
-4. let the root decide how those findings affect implementation
-
-Do not mix speculative external claims into implementation decisions without verification.
-
----
-
-## Cost and context discipline
-
-Use Luna for routine subagent execution.
-
-Keep the root context focused on:
-
-- architectural decisions
-- summarized evidence
-- important diffs
-- test results
-- reviewer findings
-- unresolved risks
-
-Do not paste large raw logs or entire files back into the root when a concise evidence summary is enough.
-
-Subagents should return:
-
-- conclusions
-- relevant file paths
-- important line or symbol references
-- commands run
-- test results
-- risks or blockers
-
-Avoid returning large amounts of irrelevant raw output.
-
----
-
-## Escalation behavior
-
-A subagent should report back instead of expanding scope when it encounters:
-
-- an architectural decision
-- a breaking API or schema change
-- a new dependency
-- a security-sensitive design choice
-- unclear requirements with materially different outcomes
-- unexpected changes outside its assigned scope
-- changes that affect another worker's ownership
-- a blocker that requires substantially broader reasoning
-
-The root decides what to do next.
-
-Luna should not independently escalate itself to a more expensive model.
-
-The root owns model escalation decisions.
-
----
-
-## Failure handling
-
-If a subagent fails:
-
-1. inspect the failure reason
-2. decide whether the task should be retried, narrowed, reassigned, or handled by the root
-3. do not silently ignore the failed delegation
-4. do not claim the delegated work completed successfully
-
-If `spawn_agent` itself fails, explicitly note the failure.
-
-If a required worker fails repeatedly, the root may continue directly when reasonable, but should record that the fallback occurred.
-
----
-
-## Delegated-task completion gate
-
-Before producing the final answer for a delegated task, confirm that:
-
-- every required subagent was actually spawned
-- every required subagent either completed or explicitly failed
-- material findings were integrated
-- conflicting findings were resolved
-- required verification was performed
-- no required agent is still running
-
-Do not finish while required subagents are still running.
-
-Do not claim delegation occurred unless `spawn_agent` was actually called successfully.
-
----
-
-## Final verification
-
-Before claiming completion, the root should:
-
-1. inspect the final diff
-2. confirm the requested behavior is actually implemented
-3. check material reviewer findings
-4. run or confirm the highest-value tests
-5. verify that delegated results were integrated correctly
-6. state any validation that could not be performed
-
-For implementation tasks, prefer checking:
-
-- syntax or type checks
-- targeted unit tests
-- integration tests where relevant
-- build success where relevant
-- the original reproduction path
-- final diff for unintended changes
-
----
-
-## User-facing behavior
-
-Do not narrate every subagent action unless the user asks for detailed orchestration visibility.
-
-The final answer should focus on:
-
-- what changed
-- what was verified
-- important findings
-- remaining risks or limitations
-
-When useful, briefly mention which agents contributed.
-
-If the user explicitly asks to see delegation, report:
-
-- subagent name
-- model
-- assigned task
-- completion status
-
-Do not claim a Luna agent was used unless the trace contains a successful `spawn_agent` call using `gpt-5.6-luna`.
+Every delegated task includes the objective, exact scope, relevant context,
+constraints, deliverable, acceptance criteria, risk level, and file ownership.
+Use one writer per file or subsystem. Read-only roles do not edit. Escalate
+architectural, security-sensitive, dependency, schema/API, or scope-expanding
+decisions to the root.
+
+Require concise structured reports:
+
+1. decision or evidence;
+2. files changed (if authorized);
+3. exact validation and result; and
+4. remaining risks or required decisions.
+
+## Git and checkpoints
+
+At task start inspect status, branch, and HEAD. Work on `codex/<task>`. When
+the user has authorized commits, create reversible logical checkpoint commits
+only after inspecting the staged diff. Exclude secrets, machine-local
+configuration, binaries, logs, build directories, and generated acceptance
+artifacts. Never auto-push. Prefer reverting with a new commit over rewriting or
+discarding shared history.
+
+The workflow installer must never create a branch or commit.
+
+For resumable work, use the repository Git directory rather than a tracked file:
+
+```text
+git rev-parse --git-path codex-tasks/<task>/state.json
+```
+
+Record the risk, phase, branch/HEAD, active child IDs, ownership, completed
+checks, and next action.
+
+## Context and monitoring discipline
+
+Use the smallest useful role set. Do not repeat full-repository scans or full
+test suites without evidence that invalidates the earlier baseline. After a
+fix, re-review only the delta and affected boundary. Preserve the root's context
+for decisions and integration rather than raw logs.
+
+Prefer completion events and bounded waits. Use a 15-minute heartbeat only for
+delegated work expected to exceed 15 minutes and only when recurring monitoring
+is supported. It should inspect new results, correct drift, unblock work, remain
+quiet when unchanged, and stop when all tasks finish. Otherwise rely on the
+resumable state record; never simulate a heartbeat with frequent polling.
+
+## Verification and acceptance
+
+Automated verification and manual acceptance are separate gates. Report exact
+test, build, lint, and diff-check commands and results. A passing automated gate
+does not imply manual acceptance.
+
+For a desktop task where the user needs a runnable candidate, the final gate
+runs the target project's documented build command. Report the EXE's absolute
+path, build time, byte size, and SHA-256, and keep the artifact/build output out
+of Git. Mark manual acceptance `pending` until the user exercises it or
+`passed` only after explicit confirmation. Do not hardcode a project-specific
+build command into this generic workflow.
+
+Before reporting completion, confirm that required roles finished or explicitly
+failed, material findings were resolved, automated gates passed, and manual
+acceptance is labeled accurately.

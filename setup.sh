@@ -3,6 +3,9 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+managed_block_begin='<!-- BEGIN CODEX PRO WORKFLOW -->'
+managed_block_end='<!-- END CODEX PRO WORKFLOW -->'
+utf8_bom=$(printf '\357\273\277')
 
 cat <<'BANNER'
 +---------------------------------------+
@@ -13,8 +16,8 @@ cat <<'BANNER'
 |/_/   \_\____/ |_| |_| \_\/_/   \_\    |
 |                                       |
 |       O R C H E S T R A T O R         |
-|   Plan and orchestrate with Astra.    |
-|          Execute with Luna.           |
+|    Plan and orchestrate with Sol.     |
+|    Execute with Luna High/Max.        |
 +---------------------------------------+
 BANNER
 printf '%s\n' 'Interactive project setup'
@@ -119,14 +122,11 @@ merge_conflicts() {
 
 select_plan() {
     printf '%s\n' 'Choose Profile to install'
-    # Keep the original profiles first for existing numeric selections.
-    printf '%s\n' '  1) Pro  - GPT-6 Astra (medium) orchestrates, GPT-5.6 Luna (max) executes, GPT-6 Astra (low) reviews'
-    printf '%s\n' '  2) Plus - GPT-5.6 Luna (max) orchestrates, GPT-5.6 Luna (medium) executes, GPT-6 Astra (low) reviews'
-    printf '%s\n' '  3) Pro (max 2 subagents) - GPT-6 Astra (medium) orchestrates, GPT-5.6 Luna (max) executes, GPT-6 Astra (low) reviews'
-    printf '%s\n' '  4) Plus (max 2 subagents) - GPT-5.6 Luna (max) orchestrates, GPT-5.6 Luna (medium) executes, GPT-6 Astra (low) reviews'
+    printf '%s\n' '  1) Pro - Sol plans/solves, Luna High/Max handles routine work, Astra reviews'
+    printf '%s\n' '  2) Pro (max 2 subagents) - same roles, with at most 2 concurrent subagents'
 
     while :; do
-        printf '%s' 'Select plan [1-4] (default 1): '
+        printf '%s' 'Select profile [1-2] (default 1): '
         if ! IFS= read -r answer; then
             printf '\nSetup cancelled: input ended before setup was complete.\n' >&2
             exit 1
@@ -134,10 +134,8 @@ select_plan() {
 
         case "$answer" in
             1|pro|PRO|Pro|'') plan=pro; return ;;
-            2|plus|PLUS|Plus) plan=plus; return ;;
-            3|pro-max-2-subagents) plan=pro-max-2-subagents; return ;;
-            4|plus-max-2-subagents) plan=plus-max-2-subagents; return ;;
-            *) printf '%s\n' 'Please enter a listed plan number or name.' ;;
+            2|pro-max-2-subagents) plan=pro-max-2-subagents; return ;;
+            *) printf '%s\n' 'Please enter a listed profile number or name.' ;;
         esac
     done
 }
@@ -159,17 +157,107 @@ copy_component() {
                 printf 'Skipped %s: target must be a regular file, not a symbolic link.\n' "$name" >&2
                 return 0
             fi
-            instructions=$(cat "$source_path")
-            existing_instructions=$(cat "$destination_path")
-            case "$existing_instructions" in
-                *"$instructions"*)
-                    printf 'Skipped %s: instructions already present.\n' "$name"
+            if ! managed_block=$(awk \
+                -v begin="$managed_block_begin" \
+                -v end="$managed_block_end" \
+                -v bom="$utf8_bom" '
+                {
+                    line = $0
+                    sub(/\r$/, "", line)
+                    if (FNR == 1 && substr(line, 1, length(bom)) == bom) {
+                        line = substr(line, length(bom) + 1)
+                    }
+                    if (line == begin) {
+                        begin_count++
+                        if (capture) invalid = 1
+                        capture = 1
+                    }
+                    if (capture) print line
+                    if (line == end) {
+                        end_count++
+                        if (!capture) invalid = 1
+                        else complete_count++
+                        capture = 0
+                    }
+                }
+                END {
+                    if (begin_count != 1 || end_count != 1 ||
+                        complete_count != 1 || capture || invalid) exit 42
+                }
+            ' "$source_path"); then
+                printf '%s\n' 'Error: setup AGENTS.md must contain exactly one valid managed workflow block.' >&2
+                exit 1
+            fi
+            if [ -z "$managed_block" ]; then
+                printf '%s\n' 'Error: setup AGENTS.md managed workflow block extraction was empty.' >&2
+                exit 1
+            fi
+
+            if grep -Fq "$managed_block_begin" "$destination_path" || grep -Fq "$managed_block_end" "$destination_path"; then
+                temp_dir=$(mktemp -d "${TMPDIR:-/tmp}/codex-pro-setup.XXXXXX")
+                block_file=$temp_dir/managed-block
+                updated_file=$temp_dir/AGENTS.md
+                printf '%s\n' "$managed_block" > "$block_file"
+                if ! awk \
+                    -v begin="$managed_block_begin" \
+                    -v end="$managed_block_end" \
+                    -v bom="$utf8_bom" '
+                    FNR == NR {
+                        block_lf = block_lf $0 ORS
+                        block_crlf = block_crlf $0 "\r\n"
+                        next
+                    }
+                    {
+                        line = $0
+                        marker_uses_crlf = sub(/\r$/, "", line)
+                        target_has_bom = (FNR == 1 && substr(line, 1, length(bom)) == bom)
+                        if (target_has_bom) line = substr(line, length(bom) + 1)
+
+                        if (line == begin) {
+                            begin_count++
+                            if (replacing) invalid = 1
+                            if (target_has_bom) printf "%s", bom
+                            if (marker_uses_crlf) printf "%s", block_crlf
+                            else printf "%s", block_lf
+                            replacing = 1
+                            next
+                        }
+                        if (line == end) {
+                            end_count++
+                            if (!replacing) invalid = 1
+                            replacing = 0
+                            next
+                        }
+                        if (!replacing) print $0
+                    }
+                    END {
+                        if (begin_count != 1 || end_count != 1 || replacing || invalid) exit 42
+                    }
+                ' "$block_file" "$destination_path" > "$updated_file"; then
+                    rm -- "$block_file" "$updated_file"
+                    rmdir -- "$temp_dir"
+                    printf '%s\n' 'Error: target AGENTS.md has malformed, duplicate, or out-of-order managed workflow markers; left it unchanged.' >&2
+                    exit 1
+                fi
+                if cmp -s "$updated_file" "$destination_path"; then
+                    printf 'Skipped %s: managed workflow block already current.\n' "$name"
+                    rm -- "$block_file" "$updated_file"
+                    rmdir -- "$temp_dir"
                     return 0
-                    ;;
-            esac
-            printf '\n\n' >> "$destination_path"
-            cat "$source_path" >> "$destination_path"
-            printf 'Appended instructions to %s. Existing contents preserved.\n' "$name"
+                fi
+                cp "$updated_file" "$destination_path"
+                rm -- "$block_file" "$updated_file"
+                rmdir -- "$temp_dir"
+                printf 'Updated managed workflow block in %s. Unrelated contents preserved.\n' "$name"
+                component_installed=yes
+                return 0
+            fi
+
+            if grep -Eqi 'astra-orchestrator|Sol root|Astra reviewer|Luna (High|Max)' "$destination_path"; then
+                printf '%s\n' 'WARNING: legacy unmarked orchestrator instructions were preserved in AGENTS.md; review/remove them manually to avoid conflicting rules.' >&2
+            fi
+            printf '\n\n%s\n' "$managed_block" >> "$destination_path"
+            printf 'Appended managed workflow block to %s. Existing contents preserved.\n' "$name"
             component_installed=yes
             return 0
         fi
@@ -218,6 +306,43 @@ copy_component() {
     component_installed=yes
 }
 
+remove_legacy_deepseek_files() {
+    codex_dir=$target_dir/.codex
+    legacy_files=''
+    for name in \
+        local_deepseek_runner.py \
+        models.json \
+        run-deepseek-role.ps1 \
+        start-ustc-adapter.ps1 \
+        start-ustc-adapter.sh \
+        ustc_chat_adapter.py
+    do
+        path=$codex_dir/$name
+        if [ -f "$path" ]; then
+            if [ "$name" != models.json ] || grep -qi 'deepseek-' "$path"; then
+                legacy_files="$legacy_files
+$path"
+            fi
+        fi
+    done
+    if [ -z "$legacy_files" ]; then
+        return
+    fi
+
+    printf '%s\n' 'The following obsolete DeepSeek adapter files remain from an older profile:'
+    printf '%s\n' "$legacy_files" | sed '/^$/d; s/^/  - /'
+    if ! confirm 'Remove these obsolete files?' yes; then
+        printf '%s\n' 'Left obsolete adapter files unchanged.'
+        return
+    fi
+    printf '%s\n' "$legacy_files" | while IFS= read -r path; do
+        if [ -n "$path" ]; then
+            rm -- "$path"
+        fi
+    done
+    printf '%s\n' 'Removed obsolete DeepSeek adapter files.'
+}
+
 plan=pro
 select_plan
 
@@ -233,11 +358,14 @@ for component in .codex .agents AGENTS.md; do
         fi
         if [ "$component_installed" = yes ]; then
             installed=$((installed + 1))
+            if [ "$component" = .codex ]; then
+                remove_legacy_deepseek_files
+            fi
         fi
     else
         printf 'Skipped %s.\n' "$component"
     fi
 done
 
-printf '\nSetup complete. %s component(s) installed in %s (plan: %s).\n' "$installed" "$target_dir" "$plan"
+printf '\nSetup complete. %s component(s) installed in %s (profile: %s).\n' "$installed" "$target_dir" "$plan"
 printf '%s\n' 'See guides/ for optional Codex model and Fast-mode configurations.'
