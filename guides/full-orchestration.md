@@ -1,35 +1,57 @@
-# 完整编排：Sol + Luna + Astra
+# 完整编排：Pro v2
 
-推荐使用 `pro` profile：
+Root 在整个线程固定使用 GPT-5.6 Sol High，负责风险分级、架构、协调、集成和验收。
+不要中途切换 root 模型或推理强度，以保留 prompt cache 连续性。
 
 ```text
 Sol root (high)
-├── Luna explorer (high)   搜索、仓库路径梳理
-├── Luna worker (max)      明确的小功能、批量修改
-├── Luna tester (high)     复现、测试、构建
-├── Luna researcher (high) 权威资料核对
-├── Sol solver (high)      复杂实现、跨文件调试
-└── Astra reviewer (low)   独立终审
+├── Luna auditor (max, read-only)       事实挑战、冲突门禁、行为契约
+├── Luna explorer (high, read-only)     仓库取证
+├── Luna worker (max)                   bounded writer
+├── Luna tester (high)                  测试与构建
+├── Luna researcher (high, read-only)   权威资料
+├── Sol solver (high)                   复杂 writer
+├── Astra reviewer (low, read-only)     设计或经济型 diff 审查
+└── Astra reviewer_high (high, read-only) R3 独立终审
 ```
 
-## 工作流
+## 实现前事实门禁
 
-1. Root 明确完成标准、依赖、风险和任务边界。
-2. 独立的探索、研究和验证任务可以并行派发。
-3. Luna worker 只接边界清晰的实现；复杂或强耦合工作交给 Sol。
-4. Root 汇总结果、解决冲突，并保证实现代理的文件所有权不重叠。
-5. Luna tester 运行最高价值验证；Astra reviewer 检查真实 diff。
-6. 具体问题返回合适角色修复，最后由 root 验收。
+R1-R3 先由 auditor 独立检查用户事实与拟议修复，并把关键 claim 分类为
+`CONFIRMED`、`PARTIALLY_CONFIRMED`、`CONTRADICTED` 或 `UNKNOWN`。
+报告必须包含证据、`CLEAR/BLOCK`、行为契约和残余不确定性。若机制不能实现期望
+行为、违反现有不变量，或结果依赖被否定/未解决的关键事实，则标记 `BLOCK`；
+root 在用户确认或更强证据出现前不能开始写入。
 
-## 15 分钟 heartbeat
+## 风险路径
 
-只为预计明显超过 15 分钟的委派流程创建 heartbeat。每次检查：
+- R0：root-only 机械修改与直接验证。
+- R1：auditor -> 单一 bounded writer -> tester -> root。
+- R2：auditor -> explorer -> 单一 worker/solver -> tester -> reviewer DIFF
+  (Astra low) -> root。
+- R3：auditor -> explorer -> reviewer DESIGN (Astra low) -> 单一 Sol solver ->
+  tester -> reviewer_high (Astra high) -> root 与所需人工门禁。
 
-- 查看活跃任务和新结果
-- 对照验收标准识别漂移
-- 缩小、补充上下文、改派或升级阻塞任务
-- 跳过已完成任务
-- 没有需要干预时保持安静
-- 全部完成后删除 heartbeat
+安全/权限、不可逆操作、公共 API/schema、数据完整性、并发、部署和大影响面应升到
+R3。具体任务的安全限制不会自动成为以后任务的默认规则。
 
-没有定时监控能力时使用事件驱动更新和有界等待，不要高频轮询。
+## 上下文、Git 与恢复
+
+每个委派写清目标、范围、约束、验收和文件所有权。子代理只返回结论/证据、改动文件、
+验证和风险。没有基线失效证据时不重复全仓扫描或全量测试；修复后只复查 delta 与
+受影响边界。
+
+任务开始检查 status、branch、HEAD，在 `codex/<task>` 工作。commit 获授权后，
+先检查 staged diff，再提交可逆逻辑检查点；排除 secret、本机配置、二进制、日志、
+build 目录和验收产物；绝不自动 push，优先 revert。安装器没有任何 Git 副作用。
+
+可恢复状态写到 `git rev-parse --git-path codex-tasks/<task>/state.json`，不纳入
+版本控制。优先完成事件和有界等待；只有长于 15 分钟且平台支持时使用 15 分钟
+heartbeat，否则禁止用轮询模拟。
+
+## 验收
+
+自动门禁单独列出测试、lint、build、diff check 的命令和结果。桌面任务需要可运行
+候选时，用目标项目命令构建 EXE，报告绝对路径、构建时间、字节大小与 SHA-256，
+并将产物排除于 Git。`manual acceptance` 在用户运行前是 `pending`，只有用户
+明确确认后才是 `passed`。

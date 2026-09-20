@@ -11,6 +11,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PROFILES_ROOT = REPOSITORY_ROOT / "profiles"
 PROFILE_NAMES = ("pro", "pro-max-2-subagents")
 LUNA_HIGH_ROLES = ("explorer", "tester", "researcher")
+MANAGED_BLOCK_BEGIN = "<!-- BEGIN CODEX PRO WORKFLOW -->"
+MANAGED_BLOCK_END = "<!-- END CODEX PRO WORKFLOW -->"
 
 
 def load_toml(path: Path) -> dict[str, object]:
@@ -60,10 +62,34 @@ class ProfileConfigTests(unittest.TestCase):
                 self.assertEqual(config["model_provider"], "openai")
                 self.assertEqual(config["model_reasoning_effort"], "max")
 
+    def test_auditor_is_read_only_luna_max_with_behavior_gate(self) -> None:
+        classifications = {
+            "CONFIRMED",
+            "PARTIALLY_CONFIRMED",
+            "CONTRADICTED",
+            "UNKNOWN",
+        }
+        for profile in PROFILE_NAMES:
+            with self.subTest(profile=profile):
+                config = load_toml(
+                    PROFILES_ROOT / profile / "codex" / "agents" / "auditor.toml"
+                )
+                self.assertEqual(config["model"], "gpt-5.6-luna")
+                self.assertEqual(config["model_provider"], "openai")
+                self.assertEqual(config["model_reasoning_effort"], "max")
+                self.assertEqual(config["sandbox_mode"], "read-only")
+                instructions = config["developer_instructions"]
+                for classification in classifications:
+                    self.assertIn(classification, instructions)
+                self.assertIn("material semantic conflict", instructions)
+                self.assertIn("Implementation must not begin", instructions)
+                self.assertIn("Behavior contract", instructions)
+
     def test_solver_and_reviewer_are_explicit(self) -> None:
         expected = {
             "solver": ("gpt-5.6-sol", "high", "workspace-write"),
             "reviewer": ("gpt-6-astra", "low", "read-only"),
+            "reviewer_high": ("gpt-6-astra", "high", "read-only"),
         }
         for profile in PROFILE_NAMES:
             for role, values in expected.items():
@@ -104,6 +130,34 @@ class ProfileConfigTests(unittest.TestCase):
                 self.assertEqual(
                     load_toml(role_file), load_toml(limited_agents / role_file.name)
                 )
+
+        regular_skill = (
+            PROFILES_ROOT / "pro" / "agents" / "skills" / "astra-orchestrator" / "SKILL.md"
+        )
+        limited_skill = (
+            PROFILES_ROOT
+            / "pro-max-2-subagents"
+            / "agents"
+            / "skills"
+            / "astra-orchestrator"
+            / "SKILL.md"
+        )
+        self.assertEqual(
+            regular_skill.read_text(encoding="utf-8"),
+            limited_skill.read_text(encoding="utf-8"),
+        )
+
+    def test_managed_agents_block_is_well_formed(self) -> None:
+        instructions = (REPOSITORY_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertEqual(instructions.count(MANAGED_BLOCK_BEGIN), 1)
+        self.assertEqual(instructions.count(MANAGED_BLOCK_END), 1)
+        self.assertLess(
+            instructions.index(MANAGED_BLOCK_BEGIN), instructions.index(MANAGED_BLOCK_END)
+        )
+        self.assertIn("R0", instructions)
+        self.assertIn("R3", instructions)
+        self.assertIn("reviewer_high", instructions)
+        self.assertIn("manual acceptance", instructions)
 
     def test_profiles_have_no_deepseek_assets_or_secrets(self) -> None:
         forbidden_names = {

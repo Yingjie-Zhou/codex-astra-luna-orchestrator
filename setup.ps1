@@ -5,6 +5,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $scriptDir = Split-Path -Parent $PSCommandPath
+$managedBlockBegin = '<!-- BEGIN CODEX PRO WORKFLOW -->'
+$managedBlockEnd = '<!-- END CODEX PRO WORKFLOW -->'
 $banner = @'
 +---------------------------------------+
 |    _    ____ _____ ____      _        |
@@ -252,10 +254,16 @@ function Install-Component {
         if ($Name -eq 'AGENTS.md') {
             $instructions = [IO.File]::ReadAllText($sourcePath)
             $existing = [IO.File]::ReadAllText($destinationPath)
-            $normalizedInstructions = $instructions.Replace("`r`n", "`n").TrimEnd("`n")
-            if ($existing.Replace("`r`n", "`n").Contains($normalizedInstructions)) {
-                [Console]::WriteLine("Skipped ${Name}: instructions already present.")
-                return $false
+            $blockPattern = [regex]::Escape($managedBlockBegin) + '(?s:.*?)' + [regex]::Escape($managedBlockEnd)
+            $sourceMatches = [regex]::Matches($instructions, $blockPattern)
+            if ($sourceMatches.Count -ne 1) {
+                throw 'Setup AGENTS.md must contain exactly one complete managed workflow block.'
+            }
+            $managedBlock = $sourceMatches[0].Value
+            $targetBeginCount = [regex]::Matches($existing, [regex]::Escape($managedBlockBegin)).Count
+            $targetEndCount = [regex]::Matches($existing, [regex]::Escape($managedBlockEnd)).Count
+            if ($targetBeginCount -ne $targetEndCount -or $targetBeginCount -gt 1) {
+                throw 'Target AGENTS.md has malformed or duplicate managed workflow markers; fix it manually before retrying.'
             }
             $reader = [IO.StreamReader]::new($destinationPath, [Text.Encoding]::UTF8, $true)
             try {
@@ -265,8 +273,28 @@ function Install-Component {
             finally {
                 $reader.Dispose()
             }
-            [IO.File]::AppendAllText($destinationPath, "`n`n" + $instructions, $encoding)
-            [Console]::WriteLine("Appended instructions to ${Name}. Existing contents preserved.")
+
+            if ($targetBeginCount -eq 1) {
+                $targetMatch = [regex]::Match($existing, $blockPattern)
+                if (-not $targetMatch.Success) {
+                    throw 'Target AGENTS.md managed workflow markers are out of order.'
+                }
+                $updated = $existing.Substring(0, $targetMatch.Index) + $managedBlock + $existing.Substring($targetMatch.Index + $targetMatch.Length)
+                if ($updated -ceq $existing) {
+                    [Console]::WriteLine("Skipped ${Name}: managed workflow block already current.")
+                    return $false
+                }
+                [IO.File]::WriteAllText($destinationPath, $updated, $encoding)
+                [Console]::WriteLine("Updated managed workflow block in ${Name}. Unrelated contents preserved.")
+                return $true
+            }
+
+            if ($existing -match '(?i)astra-orchestrator|Sol root|Astra reviewer|Luna (High|Max)') {
+                [Console]::Error.WriteLine('WARNING: legacy unmarked orchestrator instructions were preserved in AGENTS.md; review/remove them manually to avoid conflicting rules.')
+            }
+            $separator = if ($existing.EndsWith("`n")) { "`n" } else { "`n`n" }
+            [IO.File]::AppendAllText($destinationPath, $separator + $managedBlock + "`n", $encoding)
+            [Console]::WriteLine("Appended managed workflow block to ${Name}. Existing contents preserved.")
             return $true
         }
 

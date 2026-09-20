@@ -1,149 +1,126 @@
 ---
 name: astra-orchestrator
-description: Orchestrate complex Codex work with Sol High as planner and integrator, Luna High for routine exploration, testing, and research, Luna Max for bounded implementation, Sol for difficult implementation, and Astra for independent review. Use for multi-file work, cross-component debugging, parallel workstreams, or explicit delegation requests.
+description: Orchestrate multi-file, cross-component, ambiguous, or high-risk Codex development with a stable Sol High root, a Luna Max pre-implementation auditor, risk-based R0-R3 routing, specialized Luna/Sol writers and testers, and independent Astra reviews.
 ---
 
-# Sol + Luna + Astra Orchestrator — Pro
+# Sol + Luna + Astra Orchestrator — Pro v2
 
-The user's explicit instructions always take precedence.
+The user's explicit instructions and task-specific safety restrictions always
+take precedence.
 
-## Topology
+## Stable topology
 
-- root: GPT-5.6 Sol, high — architecture, decomposition, coordination, integration, final acceptance
-- explorer: GPT-5.6 Luna, high — repository mapping and evidence gathering
-- worker: GPT-5.6 Luna, max — bounded routine implementation and batch changes
+Keep the root on GPT-5.6 Sol with high reasoning for the entire thread. The root
+owns risk classification, architecture, decomposition, integration, and final
+acceptance. Never recommend changing the root model or reasoning effort
+mid-thread because prompt-cache continuity is part of the workflow.
+
+- auditor: GPT-5.6 Luna, max, read-only — independent fact/behavior audit
+- explorer: GPT-5.6 Luna, high, read-only — repository evidence and code paths
+- worker: GPT-5.6 Luna, max — bounded implementation and batch changes
 - tester: GPT-5.6 Luna, high — reproduction, tests, builds, and validation
-- researcher: GPT-5.6 Luna, high — primary-source technical research
-- solver: GPT-5.6 Sol, high — difficult implementation, cross-file refactors, and non-obvious debugging
-- reviewer: GPT-6 Astra, low — independent final review
+- researcher: GPT-5.6 Luna, high, read-only — primary-source technical research
+- solver: GPT-5.6 Sol, high — coupled implementation and difficult debugging
+- reviewer: GPT-6 Astra, low, read-only — R2 diff or R3 design review
+- reviewer_high: GPT-6 Astra, high, read-only — independent R3 final review
 
-Use Luna High for routine exploration, testing, and research, and Luna Max for
-bounded implementation. Use the Sol solver when work is too coupled, ambiguous,
-or reasoning-heavy for a bounded Luna worker.
+## Auditor gate
 
-## Delegation gate
+Before implementation on R1-R3, the auditor independently challenges material
+user factual assumptions and the proposed fix against repository evidence. It
+classifies each material claim as `CONFIRMED`, `PARTIALLY_CONFIRMED`,
+`CONTRADICTED`, or `UNKNOWN`, then returns:
 
-Classify the task before substantive repository work:
+1. a concise claim ledger with evidence;
+2. `CLEAR` or `BLOCK` for the conflict gate;
+3. a behavior contract covering observable behavior, invariants, non-goals, and
+   acceptance evidence; and
+4. residual uncertainty.
 
-- **root-only**: genuinely small, localized, and not improved by independent
-  exploration, implementation, testing, research, or review.
-- **delegated**: spans files or components, needs exploration, has independent
-  workstreams, benefits from separate implementation and verification context,
-  requires current external facts, or was explicitly requested as multi-agent.
+A semantic conflict is material when the requested mechanism would not produce
+the requested behavior, violates an established invariant, or relies on a
+contradicted/unresolved fact that can change the outcome. A `BLOCK` stops
+implementation until the root resolves it with the user or stronger evidence.
 
-When delegated, spawn at least one real subagent before doing the delegated work.
-If spawning is unavailable, report that fact instead of pretending delegation
-occurred. Do not create subagents solely to satisfy this rule for trivial work.
+## R0-R3 routing
 
-## Routing
+Classify risk by semantics, reversibility, blast radius, and evidence—not only
+diff size.
 
-| Work | Role |
-| --- | --- |
-| Search, inventory, trace code or data flow | explorer |
-| Small feature, mechanical edit, formatting, narrow refactor | worker |
-| Reproduce, test, lint, build, regression check | tester |
-| Current API or framework facts from primary sources | researcher |
-| Complex feature, cross-file change, difficult debugging | solver |
-| Independent correctness, security, and regression review | reviewer |
+| Risk | Route | Typical scope |
+| --- | --- | --- |
+| R0 mechanical | root only, then direct verification | localized behavior-preserving change |
+| R1 bounded | auditor -> one bounded writer -> tester -> root | contained behavior change with a clear path |
+| R2 cross-file | auditor -> explorer -> one writer -> tester -> reviewer (Astra low) -> root | multi-file/component change or meaningful regression surface |
+| R3 high-risk | auditor -> explorer -> reviewer DESIGN (Astra low) -> solver -> tester -> reviewer_high (Astra high) -> root/manual gate | security, destructive/irreversible, public API/schema, data integrity, concurrency, deployment, or broad blast radius |
 
-The root owns architectural decisions. Subagents return evidence and bounded
-results; they do not silently broaden scope or redesign the system.
+For R1, the writer is normally `worker`, though the root may write a truly
+small bounded change. For R2, choose `worker` or `solver` based on coupling.
+For R3, the Sol `solver` is the single implementation owner. The low reviewer
+must finish the design review before R3 implementation, and the high reviewer
+must be independent of implementation.
 
 ## Delegation contract
 
-Every task sent to a subagent must include:
+Every delegated task includes the objective, exact scope, relevant context,
+constraints, deliverable, acceptance criteria, risk level, and file ownership.
+Use one writer per file or subsystem. Read-only roles do not edit. Escalate
+architectural, security-sensitive, dependency, schema/API, or scope-expanding
+decisions to the root.
 
-- objective: one concrete outcome
-- scope: exact files, subsystem, or question
-- context: only what is needed to succeed
-- constraints: what must not change
-- deliverable: findings or edits expected
-- acceptance criteria: how the result will be checked
+Require concise structured reports:
 
-For implementation, assign one writer per file or subsystem. Exploration,
-research, and review tasks are read-only unless explicitly authorized.
+1. decision or evidence;
+2. files changed (if authorized);
+3. exact validation and result; and
+4. remaining risks or required decisions.
 
-## Default workflow
+## Git and checkpoints
 
-1. Analyze the request and state completion criteria, dependencies, and risks.
-2. Split independent work into bounded tasks and spawn independent roles before
-   waiting for any one of them.
-3. Use Luna High for routine exploration, testing, and research, Luna Max for
-   bounded implementation, and Sol for genuinely difficult implementation.
-4. Wait for required results. Do not make the root perform mechanical work that
-   was deliberately delegated.
-5. Integrate results, resolve conflicts, and run the highest-value verification.
-6. Use the reviewer when an independent final pass is materially useful.
-7. Send concrete fixes back to worker, solver, or tester.
-8. Report completion only when the acceptance criteria are met.
+At task start inspect status, branch, and HEAD. Work on `codex/<task>`. When
+the user has authorized commits, create reversible logical checkpoint commits
+only after inspecting the staged diff. Exclude secrets, machine-local
+configuration, binaries, logs, build directories, and generated acceptance
+artifacts. Never auto-push. Prefer reverting with a new commit over rewriting or
+discarding shared history.
 
-## Parallelism and ownership
+The workflow installer must never create a branch or commit.
 
-- Parallelize independent exploration, research, and validation.
-- Serialize dependent phases: explore -> decide -> implement -> test -> review.
-- Never give two implementation agents overlapping file ownership without an
-  explicit merge plan.
-- Keep reports concise so the root receives decisions, evidence, paths, test
-  results, and risks rather than large raw logs.
+For resumable work, use the repository Git directory rather than a tracked file:
 
-## Escalation
+```text
+git rev-parse --git-path codex-tasks/<task>/state.json
+```
 
-A Luna role should stop and report when it encounters an architectural decision,
-breaking API or schema change, new dependency, security-sensitive choice, or
-unexpected work outside its scope.
+Record the risk, phase, branch/HEAD, active child IDs, ownership, completed
+checks, and next action.
 
-Escalate routine work to the Sol solver when implementation is cross-cutting or
-remains blocked after the task has been narrowed. Keep Astra focused on an
-independent final review; the Sol root owns planning, coordination, critical
-judgment, and final acceptance.
+## Context and monitoring discipline
 
-## Failure handling
+Use the smallest useful role set. Do not repeat full-repository scans or full
+test suites without evidence that invalidates the earlier baseline. After a
+fix, re-review only the delta and affected boundary. Preserve the root's context
+for decisions and integration rather than raw logs.
 
-When a subagent fails, inspect the reason and then retry, narrow, reassign, or
-handle the remaining work in the root with an explicit note. Do not silently
-ignore failed delegation or claim it completed.
+Prefer completion events and bounded waits. Use a 15-minute heartbeat only for
+delegated work expected to exceed 15 minutes and only when recurring monitoring
+is supported. It should inspect new results, correct drift, unblock work, remain
+quiet when unchanged, and stop when all tasks finish. Otherwise rely on the
+resumable state record; never simulate a heartbeat with frequent polling.
 
-## Fifteen-minute heartbeat
+## Verification and acceptance
 
-Use a heartbeat only when delegated work is expected to run long enough that a
-15-minute check is useful. Each heartbeat should inspect new results, compare
-them with the acceptance criteria, correct drift or unblock work, skip completed
-tasks, stay quiet when no action is needed, and stop when all tasks finish.
+Automated verification and manual acceptance are separate gates. Report exact
+test, build, lint, and diff-check commands and results. A passing automated gate
+does not imply manual acceptance.
 
-If recurring monitoring is unavailable, use event-driven updates and bounded
-waits. Never simulate a heartbeat with frequent polling.
+For a desktop task where the user needs a runnable candidate, the final gate
+runs the target project's documented build command. Report the EXE's absolute
+path, build time, byte size, and SHA-256, and keep the artifact/build output out
+of Git. Mark manual acceptance `pending` until the user exercises it or
+`passed` only after explicit confirmation. Do not hardcode a project-specific
+build command into this generic workflow.
 
-In that fallback mode:
-
-- wait for collaboration completion events or use a bounded wait;
-- read task state, logs, or repository state only after a state change, failure,
-  or specific diagnostic need, never on a fixed short interval;
-- record active child IDs and the current workflow phase once; and
-- when a later wake-up is required, hand that checkpoint to a supervising
-  Windows Codex app task. A remote root must not manufacture a polling-based
-  heartbeat.
-
-## Cost and context discipline
-
-Use the smallest agent set that can safely complete the work. One to three
-delegated roles is the normal range, and simple work should use fewer. Do not
-instantiate every available role mechanically.
-
-Parallelize only genuinely independent tasks. Do not repeat a full-repository
-scan unless new evidence invalidates the baseline. Require concise reports with
-changed files, key findings, verification results, and blockers instead of raw
-logs. Keep the Sol root's active work focused on planning, decisions,
-integration, and final acceptance.
-
-## Final verification
-
-The root must inspect the final diff and verify the requested behavior. Prefer:
-
-- syntax, type, and configuration parsing checks
-- targeted unit and integration tests
-- reproduction of the original problem
-- an independent reviewer for high-risk changes
-
-Before the final response, confirm every required subagent completed or
-explicitly failed, material findings were integrated, conflicts were resolved,
-and no required agent is still running.
+Before reporting completion, confirm that required roles finished or explicitly
+failed, material findings were resolved, automated gates passed, and manual
+acceptance is labeled accurately.

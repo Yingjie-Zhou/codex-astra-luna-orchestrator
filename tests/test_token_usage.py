@@ -8,7 +8,7 @@ from pathlib import Path
 from scripts.token_usage import thread_role
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "token_usage.py"
-STRING_ROLES = ("review", "compact", "memory_consolidation")
+STRING_ROLES = ("review", "compact", "memory_consolidation", "auditor")
 
 
 class ThreadRoleTests(unittest.TestCase):
@@ -83,11 +83,11 @@ class TokenUsageCliTests(unittest.TestCase):
 
     def test_list_counts_string_subagent_sources(self):
         output = self.run_cli("--list")
-        self.assertRegex(output, r"root\s+3\s+/example")
+        self.assertRegex(output, r"root\s+4\s+/example")
 
     def test_latest_renders_string_subagent_roles(self):
         output = self.run_cli("--latest")
-        self.assertIn("4 (4 counted, 0 auto-review skipped)", output)
+        self.assertIn("5 (5 counted, 0 auto-review skipped)", output)
         for role in STRING_ROLES:
             self.assertIn(f"| {role} | test-model", output)
 
@@ -96,7 +96,7 @@ class TokenUsageCliTests(unittest.TestCase):
         self.assertEqual({thread["role"] for thread in report["threads"]}, {"root", *STRING_ROLES})
         self.assertEqual(
             sum(thread["per_model"]["test-model"]["total_tokens"] for thread in report["threads"]),
-            400,
+            500,
         )
 
 
