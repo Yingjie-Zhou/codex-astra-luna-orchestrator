@@ -2,6 +2,7 @@ name = "reviewer"
 description = "Read-only code reviewer. Use after implementation to find correctness, security, regression, concurrency, data-integrity, and missing-test risks."
 
 model = "gpt-6-astra"
+model_provider = "openai"
 model_reasoning_effort = "low"
 sandbox_mode = "read-only"
 

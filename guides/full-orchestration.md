@@ -1,54 +1,35 @@
-# Pro Profile: Astra + Luna Orchestration
+# 完整编排：Sol + Luna + Astra
 
-Choose this preset when you want Astra to plan, orchestrate, and review while
-Luna handles the execution roles. Select Pro in `setup.sh` or `setup.ps1`.
-Setup copies `profiles/pro/codex/` to `.codex/` and
-`profiles/pro/agents/` to `.agents/` in the target repository without
-rewriting configuration. For manual installation, copy those same folders
-and the repository's `AGENTS.md` to the target.
-
-The topology is:
+推荐使用 `pro` profile：
 
 ```text
-Astra root (medium)
-├── Luna explorer (max)
-├── Luna worker (max)
-├── Luna tester (max)
-├── Luna researcher (max)
-└── Astra reviewer (low)
+Sol root (high)
+├── Luna explorer (high)   搜索、仓库路径梳理
+├── Luna worker (max)      明确的小功能、批量修改
+├── Luna tester (high)     复现、测试、构建
+├── Luna researcher (high) 权威资料核对
+├── Sol solver (high)      复杂实现、跨文件调试
+└── Astra reviewer (low)   独立终审
 ```
 
-Put the root settings in the project-scoped `.codex/config.toml`, or merge
-them into `~/.codex/config.toml` for a personal/global setup:
+## 工作流
 
-```toml
-model = "gpt-6-astra"
-model_reasoning_effort = "medium"
+1. Root 明确完成标准、依赖、风险和任务边界。
+2. 独立的探索、研究和验证任务可以并行派发。
+3. Luna worker 只接边界清晰的实现；复杂或强耦合工作交给 Sol。
+4. Root 汇总结果、解决冲突，并保证实现代理的文件所有权不重叠。
+5. Luna tester 运行最高价值验证；Astra reviewer 检查真实 diff。
+6. 具体问题返回合适角色修复，最后由 root 验收。
 
-[agents]
-enabled = true
-max_concurrent_threads_per_session = 4
-default_subagent_model = "gpt-5.6-luna"
-default_subagent_reasoning_effort = "max"
-```
+## 15 分钟 heartbeat
 
-For the named roles, use these model settings in the corresponding files under
-`.codex/agents/`:
+只为预计明显超过 15 分钟的委派流程创建 heartbeat。每次检查：
 
-```toml
-# explorer.toml, worker.toml, tester.toml, researcher.toml
-model = "gpt-5.6-luna"
-model_reasoning_effort = "max"
-```
+- 查看活跃任务和新结果
+- 对照验收标准识别漂移
+- 缩小、补充上下文、改派或升级阻塞任务
+- 跳过已完成任务
+- 没有需要干预时保持安静
+- 全部完成后删除 heartbeat
 
-```toml
-# reviewer.toml
-model = "gpt-6-astra"
-model_reasoning_effort = "low"
-```
-
-The role files override the inherited `[agents]` defaults. Keep those explicit
-overrides when you want the topology above to remain stable. Remove them when
-you want all named roles to follow the defaults in `config.toml`.
-
-For the Luna-root configuration, use the [Plus profile](plus-plan.md).
+没有定时监控能力时使用事件驱动更新和有界等待，不要高频轮询。

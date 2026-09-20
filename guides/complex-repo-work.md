@@ -1,22 +1,14 @@
-# Complex Repository Work
+# 复杂仓库任务
 
-Choose this preset for architecture changes, difficult debugging, and work
-where higher-confidence reasoning matters more than latency.
+大型仓库继续使用 `pro`。Sol root 使用 high；Luna explorer、tester 和 researcher 使用 high，worker 使用 max；Sol solver 负责跨模块核心实现。
 
-This is an optional root override for the [Pro profile](full-orchestration.md),
-whose default is Astra `medium`. It leaves the installed Luna `max` roles
-and Astra `low` reviewer in place. If you adopt this override, update the
-installed skill's root-reasoning wording to match.
+推荐顺序：
 
-Add or merge this into:
+1. 多路 Luna explorer/researcher 并行取证。
+2. Sol root 汇总证据并决定架构。
+3. Luna worker 处理边界清晰且文件不重叠的改动。
+4. Sol solver 处理强耦合、跨组件或疑难调试。
+5. Luna tester 验证。
+6. Astra reviewer 对高风险变更做独立终审。
 
-`~/.codex/config.toml`
-
-```toml
-model = "gpt-6-astra"
-model_reasoning_effort = "high"
-service_tier = "standard"
-```
-
-If your Codex version does not support `service_tier`, remove that line and
-keep the model and reasoning settings.
+只为真正独立的工作流增加并发。更多子任务会重复读取上下文，不会自动更快。多个实现代理不得编辑同一文件，除非 root 明确安排所有权和合并策略。

@@ -14,8 +14,8 @@ $banner = @'
 |/_/   \_\____/ |_| |_| \_\/_/   \_\    |
 |                                       |
 |       O R C H E S T R A T O R         |
-|   Plan and orchestrate with Astra.    |
-|          Execute with Luna.           |
+|    Plan and orchestrate with Sol.     |
+|    Execute with Luna High/Max.        |
 +---------------------------------------+
 '@
 
@@ -52,13 +52,11 @@ function Read-Confirmation {
 
 function Read-Plan {
     [Console]::WriteLine('Choose Profile to install')
-    [Console]::WriteLine('  1) Pro  - GPT-6 Astra (medium) orchestrates, GPT-5.6 Luna (max) executes, GPT-6 Astra (low) reviews')
-    [Console]::WriteLine('  2) Plus - GPT-5.6 Luna (max) orchestrates, GPT-5.6 Luna (medium) executes, GPT-6 Astra (low) reviews')
-    [Console]::WriteLine('  3) Pro (max 2 subagents) - GPT-6 Astra (medium) orchestrates, GPT-5.6 Luna (max) executes, GPT-6 Astra (low) reviews')
-    [Console]::WriteLine('  4) Plus (max 2 subagents) - GPT-5.6 Luna (max) orchestrates, GPT-5.6 Luna (medium) executes, GPT-6 Astra (low) reviews')
+    [Console]::WriteLine('  1) Pro - Sol plans/solves, Luna High/Max handles routine work, Astra reviews')
+    [Console]::WriteLine('  2) Pro (max 2 subagents) - same roles, with at most 2 concurrent subagents')
 
     while ($true) {
-        [Console]::Write('Select plan [1-4] (default 1): ')
+        [Console]::Write('Select profile [1-2] (default 1): ')
         $answer = [Console]::In.ReadLine()
         if ($null -eq $answer) {
             throw 'Input ended before setup was complete.'
@@ -68,13 +66,9 @@ function Read-Plan {
             '1' { return 'pro' }
             'pro' { return 'pro' }
             '' { return 'pro' }
-            '2' { return 'plus' }
-            'plus' { return 'plus' }
-            '3' { return 'pro-max-2-subagents' }
+            '2' { return 'pro-max-2-subagents' }
             'pro-max-2-subagents' { return 'pro-max-2-subagents' }
-            '4' { return 'plus-max-2-subagents' }
-            'plus-max-2-subagents' { return 'plus-max-2-subagents' }
-            default { [Console]::WriteLine('Please enter a listed plan number or name.') }
+            default { [Console]::WriteLine('Please enter a listed profile number or name.') }
         }
     }
 }
@@ -303,6 +297,49 @@ function Install-Component {
     return $true
 }
 
+function Remove-LegacyDeepSeekFiles {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetDirectory
+    )
+
+    $codexDirectory = Join-Path $TargetDirectory '.codex'
+    $legacyNames = @(
+        'local_deepseek_runner.py',
+        'models.json',
+        'run-deepseek-role.ps1',
+        'start-ustc-adapter.ps1',
+        'start-ustc-adapter.sh',
+        'ustc_chat_adapter.py'
+    )
+    $legacyPaths = @(
+        foreach ($name in $legacyNames) {
+            $path = Join-Path $codexDirectory $name
+            if (Test-Path -LiteralPath $path -PathType Leaf) {
+                if (($name -ne 'models.json') -or ([IO.File]::ReadAllText($path) -match 'deepseek-')) {
+                    $path
+                }
+            }
+        }
+    )
+    if ($legacyPaths.Count -eq 0) {
+        return
+    }
+
+    [Console]::WriteLine('The following obsolete DeepSeek adapter files remain from an older profile:')
+    foreach ($path in $legacyPaths) {
+        [Console]::WriteLine("  - $path")
+    }
+    if (-not (Read-Confirmation -Prompt 'Remove these obsolete files?' -DefaultYes $true)) {
+        [Console]::WriteLine('Left obsolete adapter files unchanged.')
+        return
+    }
+    foreach ($path in $legacyPaths) {
+        Remove-Item -LiteralPath $path -Force
+    }
+    [Console]::WriteLine('Removed obsolete DeepSeek adapter files.')
+}
+
 try {
     [Console]::Write('Target repository path: ')
     $targetPath = [Console]::In.ReadLine()
@@ -340,6 +377,9 @@ try {
             }
             if ($result) {
                 $installed++
+                if ($component -eq '.codex') {
+                    Remove-LegacyDeepSeekFiles -TargetDirectory $targetDirectory
+                }
             }
         }
         else {
@@ -348,7 +388,7 @@ try {
     }
 
     [Console]::WriteLine()
-    [Console]::WriteLine("Setup complete. $installed component(s) installed in $targetDirectory (plan: $plan).")
+    [Console]::WriteLine("Setup complete. $installed component(s) installed in $targetDirectory (profile: $plan).")
     [Console]::WriteLine('See guides/ for optional Codex model and Fast-mode configurations.')
 }
 catch {

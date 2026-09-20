@@ -1,22 +1,12 @@
-# Routine Coding
+# 日常编码
 
-Choose this preset for predictable, routine coding tasks where lower cost and
-faster orchestration are preferred.
+一两个文件的清晰修改通常不需要完整编排。Root 能直接完成时不要委派；需要独立上下文时，优先使用 Luna Max worker，再由 Luna High tester 做目标验证。
 
-This is an optional root override for the [Plus profile](plus-plan.md),
-lowering its Luna root from `max` to `medium`. The installed Luna subagents
-remain at `medium` and the Astra reviewer at `low`. If you adopt this override,
-update the installed skill's root-reasoning wording to match.
+只在以下情况使用 Sol：
 
-Add or merge this into:
+- 多文件行为强耦合
+- 调试需要跨组件追踪
+- 公共 API、数据模型或依赖可能变化
+- Luna worker 已把问题缩小，但仍被复杂推理阻塞
 
-`~/.codex/config.toml`
-
-```toml
-model = "gpt-5.6-luna"
-model_reasoning_effort = "medium"
-service_tier = "fast"
-```
-
-If your Codex version does not support `service_tier`, remove that line and
-keep the model and reasoning settings.
+日常任务通常不需要 heartbeat，也不一定需要 Astra reviewer。

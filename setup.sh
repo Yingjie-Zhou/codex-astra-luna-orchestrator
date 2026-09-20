@@ -13,8 +13,8 @@ cat <<'BANNER'
 |/_/   \_\____/ |_| |_| \_\/_/   \_\    |
 |                                       |
 |       O R C H E S T R A T O R         |
-|   Plan and orchestrate with Astra.    |
-|          Execute with Luna.           |
+|    Plan and orchestrate with Sol.     |
+|    Execute with Luna High/Max.        |
 +---------------------------------------+
 BANNER
 printf '%s\n' 'Interactive project setup'
@@ -119,14 +119,11 @@ merge_conflicts() {
 
 select_plan() {
     printf '%s\n' 'Choose Profile to install'
-    # Keep the original profiles first for existing numeric selections.
-    printf '%s\n' '  1) Pro  - GPT-6 Astra (medium) orchestrates, GPT-5.6 Luna (max) executes, GPT-6 Astra (low) reviews'
-    printf '%s\n' '  2) Plus - GPT-5.6 Luna (max) orchestrates, GPT-5.6 Luna (medium) executes, GPT-6 Astra (low) reviews'
-    printf '%s\n' '  3) Pro (max 2 subagents) - GPT-6 Astra (medium) orchestrates, GPT-5.6 Luna (max) executes, GPT-6 Astra (low) reviews'
-    printf '%s\n' '  4) Plus (max 2 subagents) - GPT-5.6 Luna (max) orchestrates, GPT-5.6 Luna (medium) executes, GPT-6 Astra (low) reviews'
+    printf '%s\n' '  1) Pro - Sol plans/solves, Luna High/Max handles routine work, Astra reviews'
+    printf '%s\n' '  2) Pro (max 2 subagents) - same roles, with at most 2 concurrent subagents'
 
     while :; do
-        printf '%s' 'Select plan [1-4] (default 1): '
+        printf '%s' 'Select profile [1-2] (default 1): '
         if ! IFS= read -r answer; then
             printf '\nSetup cancelled: input ended before setup was complete.\n' >&2
             exit 1
@@ -134,10 +131,8 @@ select_plan() {
 
         case "$answer" in
             1|pro|PRO|Pro|'') plan=pro; return ;;
-            2|plus|PLUS|Plus) plan=plus; return ;;
-            3|pro-max-2-subagents) plan=pro-max-2-subagents; return ;;
-            4|plus-max-2-subagents) plan=plus-max-2-subagents; return ;;
-            *) printf '%s\n' 'Please enter a listed plan number or name.' ;;
+            2|pro-max-2-subagents) plan=pro-max-2-subagents; return ;;
+            *) printf '%s\n' 'Please enter a listed profile number or name.' ;;
         esac
     done
 }
@@ -218,6 +213,43 @@ copy_component() {
     component_installed=yes
 }
 
+remove_legacy_deepseek_files() {
+    codex_dir=$target_dir/.codex
+    legacy_files=''
+    for name in \
+        local_deepseek_runner.py \
+        models.json \
+        run-deepseek-role.ps1 \
+        start-ustc-adapter.ps1 \
+        start-ustc-adapter.sh \
+        ustc_chat_adapter.py
+    do
+        path=$codex_dir/$name
+        if [ -f "$path" ]; then
+            if [ "$name" != models.json ] || grep -qi 'deepseek-' "$path"; then
+                legacy_files="$legacy_files
+$path"
+            fi
+        fi
+    done
+    if [ -z "$legacy_files" ]; then
+        return
+    fi
+
+    printf '%s\n' 'The following obsolete DeepSeek adapter files remain from an older profile:'
+    printf '%s\n' "$legacy_files" | sed '/^$/d; s/^/  - /'
+    if ! confirm 'Remove these obsolete files?' yes; then
+        printf '%s\n' 'Left obsolete adapter files unchanged.'
+        return
+    fi
+    printf '%s\n' "$legacy_files" | while IFS= read -r path; do
+        if [ -n "$path" ]; then
+            rm -- "$path"
+        fi
+    done
+    printf '%s\n' 'Removed obsolete DeepSeek adapter files.'
+}
+
 plan=pro
 select_plan
 
@@ -233,11 +265,14 @@ for component in .codex .agents AGENTS.md; do
         fi
         if [ "$component_installed" = yes ]; then
             installed=$((installed + 1))
+            if [ "$component" = .codex ]; then
+                remove_legacy_deepseek_files
+            fi
         fi
     else
         printf 'Skipped %s.\n' "$component"
     fi
 done
 
-printf '\nSetup complete. %s component(s) installed in %s (plan: %s).\n' "$installed" "$target_dir" "$plan"
+printf '\nSetup complete. %s component(s) installed in %s (profile: %s).\n' "$installed" "$target_dir" "$plan"
 printf '%s\n' 'See guides/ for optional Codex model and Fast-mode configurations.'
