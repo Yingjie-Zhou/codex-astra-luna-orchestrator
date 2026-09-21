@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "workflow_version": "2.1",
+  "python_minimum": [3, 11],
+  "roles": {
+    "root": {"model": "gpt-5.6-sol", "effort": "high", "source": "config.toml"},
+    "auditor": {"model": "gpt-5.6-luna", "effort": "max", "source": "agents/auditor.toml"},
+    "explorer": {"model": "gpt-5.6-luna", "effort": "high", "source": "agents/explorer.toml"},
+    "researcher": {"model": "gpt-5.6-luna", "effort": "high", "source": "agents/researcher.toml"},
+    "worker": {"model": "gpt-5.6-luna", "effort": "max", "source": "agents/worker.toml"},
+    "tester": {"model": "gpt-5.6-luna", "effort": "high", "source": "agents/tester.toml"},
+    "solver": {"model": "gpt-5.6-sol", "effort": "high", "source": "agents/solver.toml"},
+    "reviewer": {"model": "gpt-6-astra", "effort": "low", "source": "agents/reviewer.toml"},
+    "reviewer_high": {"model": "gpt-6-astra", "effort": "high", "source": "agents/reviewer_high.toml"}
+  },
+  "evidence_caps_utf8_bytes": {
+    "child_report": 8192,
+    "forwarded_tool_excerpt": 20480,
+    "root_phase_or_recovery_summary": 12288
+  },
+  "initial_bootstrap_turns_allowed": 0,
+  "state": {
+    "schema_version": 1,
+    "phases": ["draft", "audited", "designed", "implementing", "testing", "reviewing", "automated_passed", "manual_pending", "complete", "blocked"],
+    "transitions": {
+      "draft": ["audited", "implementing", "blocked"],
+      "audited": ["designed", "implementing", "blocked"],
+      "designed": ["implementing", "blocked"],
+      "implementing": ["testing", "blocked"],
+      "testing": ["implementing", "reviewing", "automated_passed", "blocked"],
+      "reviewing": ["implementing", "testing", "automated_passed", "blocked"],
+      "automated_passed": ["manual_pending", "complete", "testing", "blocked"],
+      "manual_pending": ["complete", "testing", "blocked"],
+      "complete": ["testing", "blocked"],
+      "blocked": ["draft", "audited", "designed", "implementing", "testing", "reviewing"]
+    }
+  }
+}

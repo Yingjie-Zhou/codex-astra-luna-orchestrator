@@ -131,21 +131,16 @@ class ProfileConfigTests(unittest.TestCase):
                     load_toml(role_file), load_toml(limited_agents / role_file.name)
                 )
 
-        regular_skill = (
-            PROFILES_ROOT / "pro" / "agents" / "skills" / "astra-orchestrator" / "SKILL.md"
-        )
-        limited_skill = (
-            PROFILES_ROOT
-            / "pro-max-2-subagents"
-            / "agents"
-            / "skills"
-            / "astra-orchestrator"
-            / "SKILL.md"
-        )
+        regular_skill = PROFILES_ROOT / "pro" / "agents" / "skills" / "astra-orchestrator"
+        limited_skill = PROFILES_ROOT / "pro-max-2-subagents" / "agents" / "skills" / "astra-orchestrator"
         self.assertEqual(
-            regular_skill.read_text(encoding="utf-8"),
-            limited_skill.read_text(encoding="utf-8"),
+            {path.relative_to(regular_skill) for path in regular_skill.rglob("*") if path.is_file() and "__pycache__" not in path.parts},
+            {path.relative_to(limited_skill) for path in limited_skill.rglob("*") if path.is_file() and "__pycache__" not in path.parts},
         )
+        for path in regular_skill.rglob("*"):
+            if path.is_file() and "__pycache__" not in path.parts:
+                with self.subTest(skill_file=path.relative_to(regular_skill)):
+                    self.assertEqual(path.read_bytes(), (limited_skill / path.relative_to(regular_skill)).read_bytes())
 
     def test_managed_agents_block_is_well_formed(self) -> None:
         instructions = (REPOSITORY_ROOT / "AGENTS.md").read_text(encoding="utf-8")
@@ -158,6 +153,9 @@ class ProfileConfigTests(unittest.TestCase):
         self.assertIn("R3", instructions)
         self.assertIn("reviewer_high", instructions)
         self.assertIn("manual acceptance", instructions)
+        self.assertIn("Pro v2.1", instructions)
+        self.assertIn("8192", instructions)
+        self.assertIn("pro_guard.py attest", instructions)
 
     def test_profiles_have_no_deepseek_assets_or_secrets(self) -> None:
         forbidden_names = {

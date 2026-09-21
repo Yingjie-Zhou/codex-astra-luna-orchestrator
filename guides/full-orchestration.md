@@ -1,7 +1,11 @@
-# 完整编排：Pro v2
+# 完整编排：Pro v2.1
 
 Root 在整个线程固定使用 GPT-5.6 Sol High，负责风险分级、架构、协调、集成和验收。
 不要中途切换 root 模型或推理强度，以保留 prompt cache 连续性。
+
+角色名称必须精确。每个子任务报告在使用前，必须用捆绑的 Python 3.11+
+`pro_guard.py attest` 核对唯一 rollout session 的实际角色、模型和 effort；任何缺失、
+歧义或不匹配都阻塞。它只验证本地证据，不提供密码学防篡改保证。
 
 ```text
 Sol root (high)
@@ -45,9 +49,15 @@ R3。具体任务的安全限制不会自动成为以后任务的默认规则。
 先检查 staged diff，再提交可逆逻辑检查点；排除 secret、本机配置、二进制、日志、
 build 目录和验收产物；绝不自动 push，优先 revert。安装器没有任何 Git 副作用。
 
-可恢复状态写到 `git rev-parse --git-path codex-tasks/<task>/state.json`，不纳入
+可恢复状态由 guard 以 lock + revision CAS + atomic replace 写到
+`git rev-parse --git-path codex-tasks/<task>/state.json`，不纳入
 版本控制。优先完成事件和有界等待；只有长于 15 分钟且平台支持时使用 15 分钟
-heartbeat，否则禁止用轮询模拟。
+heartbeat，否则禁止用轮询模拟。deadline 和有限预算必须持久化。恢复时核对仓库
+身份、branch、HEAD、status fingerprint；变化令既有验收失效。候选验收绑定文件
+digest 和 dirty fingerprint。
+
+报告/摘录/root 摘要上限分别是 8192/20480/12288 UTF-8 字节。不得静默截断；
+超限必须阻塞，或换成 guard 校验的路径、SHA-256、字节数引用。
 
 ## 验收
 

@@ -174,7 +174,7 @@ class InstallerTests(unittest.TestCase):
                 self.assertEqual(updated.startswith(UTF8_BOM), target_bom)
                 self.assertEqual(updated.count(UTF8_BOM), int(target_bom))
                 self.assertIn(
-                    f"{MANAGED_BLOCK_BEGIN}\n# Codex Pro workflow", decoded
+                    f"{MANAGED_BLOCK_BEGIN}\n# Codex Pro v2.1 workflow", decoded
                 )
                 self.assertIn("Updated managed workflow block", first.stdout)
 
@@ -223,6 +223,12 @@ class InstallerTests(unittest.TestCase):
                 self.assertTrue((target / ".codex" / "agents" / "auditor.toml").is_file())
                 self.assertTrue(
                     (target / ".codex" / "agents" / "reviewer_high.toml").is_file()
+                )
+                self.assertTrue(
+                    (target / ".agents" / "skills" / "astra-orchestrator" / "scripts" / "pro_guard.py").is_file()
+                )
+                self.assertTrue(
+                    (target / ".agents" / "skills" / "astra-orchestrator" / "policy.json").is_file()
                 )
                 agents_text = (target / "AGENTS.md").read_text(encoding="utf-8")
                 self.assertEqual(agents_text.count(MANAGED_BLOCK_BEGIN), 1)

@@ -1,5 +1,9 @@
 # 复杂仓库任务
 
+Pro v2.1 在使用任何子代理输出前，先对精确角色名和完整 rollout session 运行
+`pro_guard.py attest`；角色、模型或 effort 任一不符即停止。R3 状态阶段和验收通过
+guard 的 lock、CAS 与恢复校验推进，不凭自然语言摘要跳过门禁。
+
 跨文件或组件任务至少按 R2 处理；涉及安全/权限、不可逆操作、公共 API/schema、
 数据完整性、并发、部署或大影响面时按 R3。
 
@@ -29,3 +33,6 @@ staged diff，再做可逆逻辑检查点，绝不自动 push。
 状态保存在 Git 目录的 `codex-tasks/<task>/state.json`，不跟踪。每个子任务报告
 结论/证据、文件、验证和风险；不重复未失效的全仓扫描、全量测试或完整 review。
 桌面候选构建需报告 EXE 绝对路径、构建时间、大小和 SHA-256，产物不入 Git。
+状态恢复会核对 repository identity、branch、HEAD、status fingerprint，并把变化前
+的验收标记为 stale；候选同时绑定 dirty fingerprint。报告、工具摘录和 root 摘要
+的 UTF-8 上限分别为 8192、20480、12288 字节，超限不得静默截断。
