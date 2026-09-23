@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
-  "workflow_version": "2.1",
+  "workflow_version": "2.2",
   "python_minimum": [3, 11],
   "roles": {
-    "root": {"model": "gpt-5.6-sol", "effort": "high", "source": "config.toml"},
-    "auditor": {"model": "gpt-5.6-luna", "effort": "max", "source": "agents/auditor.toml"},
-    "explorer": {"model": "gpt-5.6-luna", "effort": "high", "source": "agents/explorer.toml"},
-    "researcher": {"model": "gpt-5.6-luna", "effort": "high", "source": "agents/researcher.toml"},
-    "worker": {"model": "gpt-5.6-luna", "effort": "max", "source": "agents/worker.toml"},
-    "tester": {"model": "gpt-5.6-luna", "effort": "high", "source": "agents/tester.toml"},
-    "solver": {"model": "gpt-5.6-sol", "effort": "high", "source": "agents/solver.toml"},
+    "root": {"model": "gpt-6-sol", "effort": "high", "source": "config.toml"},
+    "auditor": {"model": "gpt-6-luna", "effort": "max", "source": "agents/auditor.toml"},
+    "explorer": {"model": "gpt-6-luna", "effort": "high", "source": "agents/explorer.toml"},
+    "researcher": {"model": "gpt-6-luna", "effort": "high", "source": "agents/researcher.toml"},
+    "worker": {"model": "gpt-6-luna", "effort": "max", "source": "agents/worker.toml"},
+    "tester": {"model": "gpt-6-luna", "effort": "high", "source": "agents/tester.toml"},
+    "solver": {"model": "gpt-6-sol", "effort": "high", "source": "agents/solver.toml"},
     "reviewer": {"model": "gpt-6-astra", "effort": "low", "source": "agents/reviewer.toml"},
     "reviewer_high": {"model": "gpt-6-astra", "effort": "high", "source": "agents/reviewer_high.toml"}
   },

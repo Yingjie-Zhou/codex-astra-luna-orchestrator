@@ -1,38 +1,38 @@
 <!-- BEGIN CODEX PRO WORKFLOW -->
-# Codex Pro v2.1 workflow
+# Codex Pro v2.2 workflow
 
 For coding tasks, use the `astra-orchestrator` skill when its trigger conditions match.
 User instructions and task-specific safety restrictions always take precedence.
 
 ## Stable root and role topology
 
-Keep the root agent on GPT-5.6 Sol with high reasoning for the entire thread. The
+Keep the root agent on GPT-6 Sol with high reasoning for the entire thread. The
 root owns architecture, risk classification, decomposition, integration, and
 final acceptance. Do not recommend switching the root model or reasoning effort
 mid-thread: preserving its prompt-cache continuity is part of the workflow.
 
 Named roles:
 
-- `auditor`: GPT-5.6 Luna, max, read-only. Before implementation, independently
-  challenge material user assumptions and proposed fixes, classify claims as
-  `CONFIRMED`, `PARTIALLY_CONFIRMED`, `CONTRADICTED`, or `UNKNOWN`, and produce a
-  concise behavior contract. A material semantic conflict blocks implementation
-  until the root resolves it with the user or stronger evidence.
-- `explorer`, `tester`, and `researcher`: GPT-5.6 Luna, high.
-- `worker`: GPT-5.6 Luna, max, for bounded implementation and batch changes.
-- `solver`: GPT-5.6 Sol, high, for coupled cross-file implementation and difficult debugging.
+- `auditor`: GPT-6 Luna, max, read-only. Before implementation, independently
+  separate observed behavior, the user's explanation or proposed fix, and the
+  desired outcome. Check them against actual code paths and relevant adjacent
+  modes; look for counterexamples and behavior that already works. Classify
+  material claims as `CONFIRMED`, `PARTIALLY_CONFIRMED`, `CONTRADICTED`, or
+  `UNKNOWN`, then produce a concise, testable behavior contract. Only a material
+  semantic conflict blocks implementation until the root resolves it with the
+  user or stronger evidence.
+- `explorer`, `tester`, and `researcher`: GPT-6 Luna, high.
+- `worker`: GPT-6 Luna, max, for bounded implementation and batch changes.
+- `solver`: GPT-6 Sol, high, for coupled cross-file implementation and difficult debugging.
 - `reviewer`: GPT-6 Astra, low, read-only, for economical design or diff review.
 - `reviewer_high`: GPT-6 Astra, high, read-only, for independent high-risk final review.
 
-Use these exact custom role names. A requested model or effort does not override a
-custom agent TOML. Before relying on any child report, fail closed by running the
-bundled `pro_guard.py attest` against exactly one full rollout session/thread ID.
-Resolve a child only from the canonical `/root/<exact-role>` `agent_path`; any
-non-null role fields must agree. Resolve root only from an unambiguous user/root
-session with no child path. Every authoritative turn context (apart from an
-explicitly permitted bootstrap turn) must match the role TOML's model and effort.
-Missing, duplicate, malformed, ambiguous, or mismatched evidence blocks the gate.
-This is local evidence validation, not cryptographic attestation.
+Use the named custom roles and their configured models. A requested model or
+effort does not override a custom agent TOML. Do not require rollout identity,
+model, or effort attestation before using child reports or advancing task phases.
+The bundled `pro_guard.py attest` remains an optional diagnostic when actual
+role/configuration drift is suspected; its local evidence check is not security
+authentication and is never a routine acceptance gate.
 
 ## R0-R3 risk routing
 
@@ -79,8 +79,10 @@ validate repository identity, branch, HEAD, and status fingerprint. Any change
 makes prior automated/manual acceptance stale. Candidate acceptance is bound to
 its SHA-256, byte size, and dirty-status fingerprint. Persist monitoring deadline
 and finite remaining budget so restarts cannot reset them. State is operational
-metadata and must not be tracked. Persist active child IDs, exact-role
-attestations, file ownership, completed checks, and the next action.
+metadata and must not be tracked. Persist active child IDs, file ownership,
+completed checks, and the next action. Role attestations are optional diagnostics.
+The v2.2 guard reads existing v2.1 state records and upgrades them on the next
+successful compare-and-swap write; unknown future versions remain rejected.
 
 Recovery with inherited active children enters `blocked` reconciliation, updates
 the repository snapshot, and forbids choosing a new writer until the inherited

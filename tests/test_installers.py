@@ -174,7 +174,7 @@ class InstallerTests(unittest.TestCase):
                 self.assertEqual(updated.startswith(UTF8_BOM), target_bom)
                 self.assertEqual(updated.count(UTF8_BOM), int(target_bom))
                 self.assertIn(
-                    f"{MANAGED_BLOCK_BEGIN}\n# Codex Pro v2.1 workflow", decoded
+                    f"{MANAGED_BLOCK_BEGIN}\n# Codex Pro v2.2 workflow", decoded
                 )
                 self.assertIn("Updated managed workflow block", first.stdout)
 

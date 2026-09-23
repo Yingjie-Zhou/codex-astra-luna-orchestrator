@@ -85,7 +85,7 @@ class ProGuardTests(unittest.TestCase):
 
     def test_policy_is_strict_and_has_exact_caps(self) -> None:
         policy = guard.load_policy()
-        self.assertEqual(policy["workflow_version"], "2.1")
+        self.assertEqual(policy["workflow_version"], "2.2")
         self.assertEqual(
             policy["evidence_caps_utf8_bytes"],
             {"child_report": 8192, "forwarded_tool_excerpt": 20480, "root_phase_or_recovery_summary": 12288},
@@ -112,12 +112,12 @@ class ProGuardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
             root_rollout = directory / "root.jsonl"
-            write_rollout(root_rollout, "root-actual", "root", "gpt-5.6-sol", "high")
+            write_rollout(root_rollout, "root-actual", "root", "gpt-6-sol", "high")
             root = guard.attest_rollout(root_rollout, "root-actual", "root", profile_root=PROFILE_ROOT)
             self.assertEqual(root["resolved_role"], "root")
 
             child_rollout = directory / "child.jsonl"
-            write_rollout(child_rollout, "child-actual", "tester", "gpt-5.6-luna", "high")
+            write_rollout(child_rollout, "child-actual", "tester", "gpt-6-luna", "high")
             child = guard.attest_rollout(child_rollout, "child-actual", "tester", profile_root=PROFILE_ROOT)
             self.assertEqual(child["resolved_role"], "tester")
             with self.assertRaises(guard.GuardError):
@@ -128,7 +128,7 @@ class ProGuardTests(unittest.TestCase):
             with self.assertRaises(guard.GuardError):
                 guard.attest_rollout(child_rollout, "child-actual", "tester", profile_root=PROFILE_ROOT)
 
-            write_rollout(child_rollout, "child-actual", "tester", "gpt-5.6-luna", "high")
+            write_rollout(child_rollout, "child-actual", "tester", "gpt-6-luna", "high")
             records = [json.loads(line) for line in child_rollout.read_text(encoding="utf-8").splitlines()]
             records[0]["payload"]["parent_thread_id"] = "different-parent"
             child_rollout.write_text("".join(json.dumps(record) + "\n" for record in records), encoding="utf-8")
@@ -146,8 +146,8 @@ class ProGuardTests(unittest.TestCase):
             directory = Path(tmp)
             first = directory / "one.jsonl"
             second = directory / "two.jsonl"
-            write_rollout(first, "duplicate", "auditor", "gpt-5.6-luna", "max")
-            write_rollout(second, "duplicate", "auditor", "gpt-5.6-luna", "max")
+            write_rollout(first, "duplicate", "auditor", "gpt-6-luna", "max")
+            write_rollout(second, "duplicate", "auditor", "gpt-6-luna", "max")
             with self.assertRaises(guard.GuardError):
                 guard.attest_rollout(directory, "duplicate", "auditor", profile_root=PROFILE_ROOT)
             second.unlink()
@@ -250,21 +250,84 @@ class ProGuardTests(unittest.TestCase):
             with self.assertRaises(guard.GuardError):
                 guard.attest_rollout(rollout, "installed-child", "reviewer_high", profile_root=root)
 
-    def test_r3_gate_requires_exact_role_chain(self) -> None:
-        state = {"risk": "R3", "roles": {}}
-        with self.assertRaises(guard.GuardError):
-            guard._require_roles_for_phase(state, "implementing")
-        state["roles"] = {name: {} for name in ("auditor", "explorer", "reviewer")}
-        guard._require_roles_for_phase(state, "implementing")
-        with self.assertRaises(guard.GuardError):
-            guard._require_roles_for_phase(state, "testing")
-        state["roles"]["solver"] = {}
-        guard._require_roles_for_phase(state, "testing")
-        state["roles"]["tester"] = {}
-        with self.assertRaises(guard.GuardError):
-            guard._require_roles_for_phase(state, "automated_passed")
-        state["roles"]["reviewer_high"] = {}
-        guard._require_roles_for_phase(state, "automated_passed")
+    def test_r3_state_progresses_without_role_attestation_but_waits_for_children(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pro guard no attestation ") as tmp:
+            repo = Path(tmp)
+            git(repo, "init")
+            git(repo, "config", "user.email", "test@example.invalid")
+            git(repo, "config", "user.name", "Pro Guard Test")
+            (repo / "tracked.txt").write_text("fixture", encoding="utf-8")
+            git(repo, "add", "tracked.txt")
+            git(repo, "commit", "-m", "fixture")
+            _, state = guard.init_state(repo, "optional-identity", "R3")
+            for phase in ("audited", "designed", "implementing", "testing", "reviewing"):
+                state = guard.transition_state(repo, "optional-identity", state["revision"], phase)
+            self.assertEqual(state["roles"], {})
+            state = guard.update_state(
+                repo, "optional-identity", state["revision"],
+                active_children={"still-running": "tester"},
+            )
+            with self.assertRaisesRegex(guard.GuardError, "active child"):
+                guard.transition_state(repo, "optional-identity", state["revision"], "automated_passed")
+            state = guard.update_state(repo, "optional-identity", state["revision"], active_children={})
+            state = guard.transition_state(repo, "optional-identity", state["revision"], "automated_passed")
+            state = guard.transition_state(repo, "optional-identity", state["revision"], "complete")
+            self.assertEqual(state["roles"], {})
+
+    def test_v21_state_is_readable_and_upgrades_only_after_successful_cas(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pro guard v21 migration ") as tmp:
+            repo = Path(tmp)
+            git(repo, "init")
+            git(repo, "config", "user.email", "test@example.invalid")
+            git(repo, "config", "user.name", "Pro Guard Test")
+            (repo / "tracked.txt").write_text("fixture", encoding="utf-8")
+            git(repo, "add", "tracked.txt")
+            git(repo, "commit", "-m", "fixture")
+            path, state = guard.init_state(repo, "v21-cas", "R0")
+            self.assertEqual(state["workflow_version"], "2.2")
+            legacy = {**state, "workflow_version": "2.1"}
+            path.write_text(json.dumps(legacy), encoding="utf-8")
+            original_bytes = path.read_bytes()
+
+            self.assertEqual(guard.read_state(path, guard.load_policy()), legacy)
+            with self.assertRaisesRegex(guard.GuardError, "revision CAS mismatch"):
+                guard.update_state(repo, "v21-cas", state["revision"] + 1, next_action="must not write")
+            self.assertEqual(path.read_bytes(), original_bytes)
+
+            upgraded = guard.update_state(repo, "v21-cas", state["revision"], next_action="continue")
+            self.assertEqual(upgraded["revision"], 1)
+            self.assertEqual(upgraded["workflow_version"], "2.2")
+            self.assertEqual(guard.read_state(path, guard.load_policy())["workflow_version"], "2.2")
+
+    def test_v21_recovery_upgrades_and_unknown_future_state_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pro guard v21 recovery ") as tmp:
+            repo = Path(tmp)
+            git(repo, "init")
+            git(repo, "config", "user.email", "test@example.invalid")
+            git(repo, "config", "user.name", "Pro Guard Test")
+            tracked = repo / "tracked.txt"
+            tracked.write_text("fixture", encoding="utf-8")
+            git(repo, "add", "tracked.txt")
+            git(repo, "commit", "-m", "fixture")
+            path, state = guard.init_state(repo, "v21-recover", "R0")
+            legacy = {**state, "workflow_version": "2.1"}
+            path.write_text(json.dumps(legacy), encoding="utf-8")
+            tracked.write_text("changed", encoding="utf-8")
+
+            recovered = guard.recover_state(repo, "v21-recover", state["revision"])
+            self.assertEqual(recovered["workflow_version"], "2.2")
+            self.assertEqual(recovered["revision"], 1)
+            self.assertEqual(recovered["repository"], guard.repository_snapshot(repo))
+            self.assertEqual(guard.read_state(path, guard.load_policy())["workflow_version"], "2.2")
+
+            future = {**recovered, "workflow_version": "2.3"}
+            path.write_text(json.dumps(future), encoding="utf-8")
+            future_bytes = path.read_bytes()
+            with self.assertRaisesRegex(guard.GuardError, "unsupported state version"):
+                guard.read_state(path, guard.load_policy())
+            with self.assertRaisesRegex(guard.GuardError, "unsupported state version"):
+                guard.update_state(repo, "v21-recover", recovered["revision"], next_action="must not write")
+            self.assertEqual(path.read_bytes(), future_bytes)
 
     def test_revisioned_state_candidate_recovery_and_monitor_budget(self) -> None:
         with tempfile.TemporaryDirectory(prefix="pro guard repo ") as tmp:
@@ -289,17 +352,21 @@ class ProGuardTests(unittest.TestCase):
                 active_children={"full-child-session-id": "tester"},
                 ownership={"candidate.bin": "root"},
                 check={"name": "baseline", "status": "passed", "evidence": "clean fixture"},
-                next_action="attest root",
+                next_action="complete verification",
             )
             self.assertEqual(state["active_children"]["full-child-session-id"], "tester")
             self.assertEqual(state["checks"][0]["status"], "passed")
 
-            rollout = Path(tmp) / "root.jsonl"
-            write_rollout(rollout, "root-session", "root", "gpt-5.6-sol", "high")
-            attestation = guard.attest_rollout(rollout, "root-session", "root", profile_root=PROFILE_ROOT)
+            rollout = Path(tmp) / "tester.jsonl"
+            write_rollout(rollout, "full-child-session-id", "tester", "gpt-6-luna", "high")
+            attestation = guard.attest_rollout(rollout, "full-child-session-id", "tester", profile_root=PROFILE_ROOT)
             attestation_file = Path(tmp) / "attestation.json"
             attestation_file.write_text(json.dumps(attestation), encoding="utf-8")
             state = guard.record_role_state(repo, "state-test", state["revision"], attestation_file)
+            self.assertEqual(state["active_children"], {"full-child-session-id": "tester"})
+            changed_policy = json.loads(json.dumps(guard.load_policy()))
+            changed_policy["roles"]["tester"]["model"] = "replacement-model"
+            guard.validate_state(state, changed_policy)
             state = guard.update_state(repo, "state-test", state["revision"], active_children={})
             state = guard.transition_state(repo, "state-test", state["revision"], "implementing")
             state = guard.transition_state(repo, "state-test", state["revision"], "testing")
@@ -360,12 +427,6 @@ class ProGuardTests(unittest.TestCase):
             candidate = repo / "candidate.bin"
             candidate.write_bytes(b"candidate-one")
             _, state = guard.init_state(repo, "ignored-candidate", "R0")
-            rollout = base / "root.jsonl"
-            write_rollout(rollout, "root-ignored", "root", "gpt-5.6-sol", "high")
-            attestation = guard.attest_rollout(rollout, "root-ignored", "root", profile_root=PROFILE_ROOT)
-            attestation_file = base / "attestation.json"
-            attestation_file.write_text(json.dumps(attestation), encoding="utf-8")
-            state = guard.record_role_state(repo, "ignored-candidate", state["revision"], attestation_file)
             state = guard.update_state(repo, "ignored-candidate", state["revision"], check={"name": "candidate", "status": "passed", "evidence": "verified"})
             state = guard.transition_state(repo, "ignored-candidate", state["revision"], "implementing")
             state = guard.transition_state(repo, "ignored-candidate", state["revision"], "testing")

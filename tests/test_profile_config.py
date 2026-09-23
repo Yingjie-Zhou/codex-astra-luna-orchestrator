@@ -31,14 +31,14 @@ class ProfileConfigTests(unittest.TestCase):
         for name in PROFILE_NAMES:
             with self.subTest(profile=name):
                 config = load_toml(PROFILES_ROOT / name / "codex" / "config.toml")
-                self.assertEqual(config["model"], "gpt-5.6-sol")
+                self.assertEqual(config["model"], "gpt-6-sol")
                 self.assertEqual(config["model_reasoning_effort"], "high")
                 self.assertNotIn("model_provider", config)
                 self.assertNotIn("model_catalog_json", config)
                 self.assertNotIn("model_providers", config)
 
                 agents = config["agents"]
-                self.assertEqual(agents["default_subagent_model"], "gpt-5.6-luna")
+                self.assertEqual(agents["default_subagent_model"], "gpt-6-luna")
                 self.assertEqual(agents["default_subagent_reasoning_effort"], "high")
 
     def test_luna_high_roles_are_explicit(self) -> None:
@@ -48,7 +48,7 @@ class ProfileConfigTests(unittest.TestCase):
                     config = load_toml(
                         PROFILES_ROOT / profile / "codex" / "agents" / f"{role}.toml"
                     )
-                    self.assertEqual(config["model"], "gpt-5.6-luna")
+                    self.assertEqual(config["model"], "gpt-6-luna")
                     self.assertEqual(config["model_provider"], "openai")
                     self.assertEqual(config["model_reasoning_effort"], "high")
 
@@ -58,7 +58,7 @@ class ProfileConfigTests(unittest.TestCase):
                 config = load_toml(
                     PROFILES_ROOT / profile / "codex" / "agents" / "worker.toml"
                 )
-                self.assertEqual(config["model"], "gpt-5.6-luna")
+                self.assertEqual(config["model"], "gpt-6-luna")
                 self.assertEqual(config["model_provider"], "openai")
                 self.assertEqual(config["model_reasoning_effort"], "max")
 
@@ -74,20 +74,23 @@ class ProfileConfigTests(unittest.TestCase):
                 config = load_toml(
                     PROFILES_ROOT / profile / "codex" / "agents" / "auditor.toml"
                 )
-                self.assertEqual(config["model"], "gpt-5.6-luna")
+                self.assertEqual(config["model"], "gpt-6-luna")
                 self.assertEqual(config["model_provider"], "openai")
                 self.assertEqual(config["model_reasoning_effort"], "max")
                 self.assertEqual(config["sandbox_mode"], "read-only")
                 instructions = config["developer_instructions"]
                 for classification in classifications:
                     self.assertIn(classification, instructions)
-                self.assertIn("material semantic conflict", instructions)
+                self.assertRegex(instructions, r"material\s+semantic conflict")
                 self.assertIn("Implementation must not begin", instructions)
                 self.assertIn("Behavior contract", instructions)
+                self.assertIn("what the user observed", instructions)
+                self.assertIn("another plausible cause", instructions)
+                self.assertIn("adjacent mode", instructions)
 
     def test_solver_and_reviewer_are_explicit(self) -> None:
         expected = {
-            "solver": ("gpt-5.6-sol", "high", "workspace-write"),
+            "solver": ("gpt-6-sol", "high", "workspace-write"),
             "reviewer": ("gpt-6-astra", "low", "read-only"),
             "reviewer_high": ("gpt-6-astra", "high", "read-only"),
         }
@@ -153,9 +156,10 @@ class ProfileConfigTests(unittest.TestCase):
         self.assertIn("R3", instructions)
         self.assertIn("reviewer_high", instructions)
         self.assertIn("manual acceptance", instructions)
-        self.assertIn("Pro v2.1", instructions)
+        self.assertIn("Pro v2.2", instructions)
         self.assertIn("8192", instructions)
-        self.assertIn("pro_guard.py attest", instructions)
+        self.assertIn("optional diagnostic", instructions)
+        self.assertIn("Do not require rollout identity", instructions)
 
     def test_profiles_have_no_deepseek_assets_or_secrets(self) -> None:
         forbidden_names = {
