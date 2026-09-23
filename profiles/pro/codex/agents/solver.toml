@@ -1,7 +1,7 @@
 name = "solver"
 description = "Complex implementation and cross-file debugging subagent. Use when routine bounded work needs deeper reasoning across components."
 
-model = "gpt-5.6-sol"
+model = "gpt-6-sol"
 model_provider = "openai"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"

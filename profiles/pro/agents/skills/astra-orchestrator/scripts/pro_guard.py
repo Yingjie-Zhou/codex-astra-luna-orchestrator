@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed local evidence and resumable-state guard for Codex Pro v2.1.
+"""Fail-closed local evidence and resumable-state guard for Codex Pro v2.2.
 
 This tool validates local rollout records and repository state.  It is not a
 cryptographic attestation mechanism and cannot prove that local files were not
@@ -9,7 +9,7 @@ tampered with.
 import sys
 
 if sys.version_info < (3, 11):
-    print("pro_guard: Codex Pro v2.1 guard requires Python 3.11 or newer", file=sys.stderr)
+    print("pro_guard: Codex Pro v2.2 guard requires Python 3.11 or newer", file=sys.stderr)
     raise SystemExit(2)
 
 import argparse
@@ -53,7 +53,7 @@ def fail(message: str) -> None:
 
 def require_python() -> None:
     if sys.version_info < (3, 11):
-        fail("Codex Pro v2.1 guard requires Python 3.11 or newer")
+        fail("Codex Pro v2.2 guard requires Python 3.11 or newer")
 
 
 def load_policy(path: Path = POLICY_PATH) -> dict[str, Any]:
@@ -63,7 +63,7 @@ def load_policy(path: Path = POLICY_PATH) -> dict[str, Any]:
         fail(f"cannot load strict policy {path}: {exc}")
     if not isinstance(policy, dict) or set(policy) != TOP_POLICY_KEYS:
         fail("policy has missing or unknown top-level keys")
-    if policy["schema_version"] != 1 or policy["workflow_version"] != "2.1":
+    if policy["schema_version"] != 1 or policy["workflow_version"] != "2.2":
         fail("unsupported policy version")
     if policy["python_minimum"] != [3, 11]:
         fail("policy Python minimum must be exactly 3.11")
@@ -72,14 +72,14 @@ def load_policy(path: Path = POLICY_PATH) -> dict[str, Any]:
     roles = policy["roles"]
     expected_roles = {"root", "auditor", "explorer", "researcher", "worker", "tester", "solver", "reviewer", "reviewer_high"}
     if not isinstance(roles, dict) or set(roles) != expected_roles:
-        fail("policy role set must use only the exact Pro v2.1 role names")
+        fail("policy role set must use only the exact Pro v2.2 role names")
     for name, value in roles.items():
         if not isinstance(value, dict) or set(value) != {"model", "effort", "source"} or not all(isinstance(v, str) and v for v in value.values()):
             fail(f"invalid role policy for {name}")
     caps = policy["evidence_caps_utf8_bytes"]
     expected_caps = {"child_report": 8192, "forwarded_tool_excerpt": 20480, "root_phase_or_recovery_summary": 12288}
     if caps != expected_caps:
-        fail("evidence caps differ from the Pro v2.1 contract")
+        fail("evidence caps differ from the Pro v2.2 contract")
     state = policy["state"]
     if not isinstance(state, dict) or set(state) != {"schema_version", "phases", "transitions"} or state["schema_version"] != 1:
         fail("invalid state policy")
@@ -307,6 +307,9 @@ def _atomic_write(path: Path, value: dict[str, Any]) -> None:
     reject_redirects(path.parent)
     if os.path.lexists(path):
         reject_redirects(path)
+    # Every successful state mutation upgrades a readable v2.1 record only
+    # after its caller has checked the expected revision and all gates.
+    value["workflow_version"] = "2.2"
     data = (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
@@ -509,7 +512,6 @@ def record_role_state(repo: Path, task: str, expected_revision: int, attestation
             fail(f"revision CAS mismatch: expected {expected_revision}, actual {state['revision']}")
         require_recovered(repo, state)
         state["roles"][role] = attestation
-        state["active_children"].pop(attestation["session_id"], None)
         state["revision"] += 1
         state["updated_at"] = utc_now()
         validate_state(state, policy)
@@ -543,37 +545,9 @@ def update_state(repo: Path, task: str, expected_revision: int, *, active_childr
     return state
 
 
-def _require_roles_for_phase(state: dict[str, Any], phase: str) -> None:
-    risk = state["risk"]
-    roles = set(state["roles"])
-    required: set[str] = set()
-    if phase in {"audited", "designed", "implementing", "testing", "reviewing", "automated_passed", "manual_pending", "complete"} and risk != "R0":
-        required.add("auditor")
-    if risk in {"R2", "R3"} and phase in {"implementing", "testing", "reviewing", "automated_passed", "manual_pending", "complete"}:
-        required.add("explorer")
-    if risk == "R3" and phase in {"designed", "implementing", "testing", "reviewing", "automated_passed", "manual_pending", "complete"}:
-        required.add("reviewer")
-    if phase in {"testing", "reviewing", "automated_passed", "manual_pending", "complete"}:
-        if risk == "R0":
-            required.add("root")
-        elif risk == "R1":
-            if not ({"root", "worker"} & roles):
-                required.add("worker")
-        elif risk == "R2":
-            if not ({"worker", "solver"} & roles):
-                required.add("worker")
-        else:
-            required.add("solver")
-    if phase in {"automated_passed", "manual_pending", "complete"}:
-        if risk != "R0":
-            required.add("tester")
-        if risk == "R2":
-            required.add("reviewer")
-        if risk == "R3":
-            required.add("reviewer_high")
-    missing = sorted(required - roles)
-    if missing:
-        fail(f"phase {phase} is missing required exact-role attestations: {', '.join(missing)}")
+def _require_finished_children_for_phase(state: dict[str, Any], phase: str) -> None:
+    # Role/model rollout diagnostics are optional; only unfinished work blocks
+    # automated or manual acceptance.
     if phase in {"automated_passed", "manual_pending", "complete"} and state.get("active_children"):
         fail(f"phase {phase} requires every active child to finish or explicitly fail")
 
@@ -581,7 +555,7 @@ def _require_roles_for_phase(state: dict[str, Any], phase: str) -> None:
 def validate_state(state: object, policy: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(state, dict) or set(state) != STATE_KEYS:
         fail("state has missing or unknown keys")
-    if state["schema_version"] != 1 or state["workflow_version"] != "2.1":
+    if state["schema_version"] != 1 or state["workflow_version"] not in {"2.1", "2.2"}:
         fail("unsupported state version")
     if not isinstance(state["revision"], int) or state["revision"] < 0:
         fail("state revision must be a nonnegative integer")
@@ -600,8 +574,7 @@ def validate_state(state: object, policy: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(state["roles"], dict) or not set(state["roles"]).issubset(policy["roles"]):
         fail("invalid exact-role attestation map")
     for role, attestation in state["roles"].items():
-        expected = policy["roles"][role]
-        if not isinstance(attestation, dict) or set(attestation) != ATTESTATION_KEYS or attestation.get("requested_role") != role or attestation.get("resolved_role") != role or attestation.get("attested") is not True or attestation.get("model") != expected["model"] or attestation.get("effort") != expected["effort"]:
+        if not isinstance(attestation, dict) or set(attestation) != ATTESTATION_KEYS or attestation.get("requested_role") != role or attestation.get("resolved_role") != role or attestation.get("attested") is not True:
             fail(f"invalid stored attestation for {role}")
     if not isinstance(state["active_children"], dict) or not all(isinstance(session_id, str) and session_id and role in set(policy["roles"]) - {"root"} for session_id, role in state["active_children"].items()):
         fail("active_children must map full session IDs to exact custom roles")
@@ -675,7 +648,7 @@ def init_state(repo: Path, task: str, risk: str, *, deadline: str | None = None,
             fail(f"state already exists: {path}")
         snapshot = repository_snapshot(repo)
         state = {
-            "schema_version": 1, "workflow_version": "2.1", "revision": 0,
+            "schema_version": 1, "workflow_version": "2.2", "revision": 0,
             "task": task, "risk": risk, "phase": "draft", "repository": snapshot,
             "active_children": {}, "roles": {}, "ownership": {}, "checks": [], "next_action": "complete audit gate",
             "monitor": {"deadline": deadline, "remaining_budget": budget}, "candidate": None,
@@ -738,7 +711,7 @@ def transition_state(repo: Path, task: str, expected_revision: int, phase: str, 
             fail("only R0 may move directly from draft to implementing")
         if phase == "designed" and state["risk"] != "R3":
             fail("designed phase is reserved for R3")
-        _require_roles_for_phase(state, phase)
+        _require_finished_children_for_phase(state, phase)
         snapshot = require_recovered(repo, state)
         if state["automated_acceptance"] == "passed" and state["candidate"] is not None and not _candidate_is_current(repo, state["candidate"], snapshot):
             fail("candidate or dirty fingerprint changed; recover state before continuing")

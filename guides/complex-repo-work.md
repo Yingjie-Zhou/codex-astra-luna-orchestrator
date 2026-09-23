@@ -1,16 +1,16 @@
 # 复杂仓库任务
 
-Pro v2.1 在使用任何子代理输出前，先对精确角色名和完整 rollout session 运行
-`pro_guard.py attest`；角色、模型或 effort 任一不符即停止。R3 状态阶段和验收通过
-guard 的 lock、CAS 与恢复校验推进，不凭自然语言摘要跳过门禁。
+Pro v2.2 不为每份子代理输出强制运行 rollout 身份校验；仅在怀疑角色或模型配置
+漂移时用 `pro_guard.py attest` 排查。R3 状态阶段和验收仍通过 guard 的 lock、
+CAS 与恢复校验推进，不凭自然语言摘要跳过验收门禁。
 
 跨文件或组件任务至少按 R2 处理；涉及安全/权限、不可逆操作、公共 API/schema、
 数据完整性、并发、部署或大影响面时按 R3。
 
 ## R2
 
-1. Luna Max auditor 核对关键事实和修复方案，输出分类 claim 与行为契约；`BLOCK`
-   时停止。
+1. Luna Max auditor 分开核对用户观察、原因推测和期望结果，寻找反例及已正常
+   工作的相邻模式，输出分类 claim 与可验收的行为契约；实质冲突 `BLOCK` 时停止。
 2. Luna High explorer 找到最小真实实现面。
 3. Root 选择单一 writer：边界清晰用 Luna Max worker，强耦合用 Sol High solver。
 4. Luna High tester 独立验证。
@@ -26,7 +26,7 @@ guard 的 lock、CAS 与恢复校验推进，不凭自然语言摘要跳过门�
 6. Root 完成自动门禁；需要用户实际运行或主观确认的部分保持
    `manual acceptance: pending`。
 
-Root 始终固定为 GPT-5.6 Sol High，不在中途切换模型/推理。任务开始检查 Git
+Root 始终固定为 GPT-6 Sol High，不在中途切换模型/推理。任务开始检查 Git
 status、branch、HEAD，在 `codex/<task>` 分支工作；用户授权 commit 时先检查
 staged diff，再做可逆逻辑检查点，绝不自动 push。
 

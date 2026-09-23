@@ -3,54 +3,55 @@ name: astra-orchestrator
 description: Orchestrate multi-file, cross-component, ambiguous, or high-risk Codex development with a stable Sol High root, a Luna Max pre-implementation auditor, risk-based R0-R3 routing, specialized Luna/Sol writers and testers, and independent Astra reviews.
 ---
 
-# Sol + Luna + Astra Orchestrator — Pro v2.1
+# Sol + Luna + Astra Orchestrator — Pro v2.2
 
 The user's explicit instructions and task-specific safety restrictions always
 take precedence.
 
 ## Stable topology
 
-Keep the root on GPT-5.6 Sol with high reasoning for the entire thread. The root
+Keep the root on GPT-6 Sol with high reasoning for the entire thread. The root
 owns risk classification, architecture, decomposition, integration, and final
 acceptance. Never recommend changing the root model or reasoning effort
 mid-thread because prompt-cache continuity is part of the workflow.
 
-- auditor: GPT-5.6 Luna, max, read-only — independent fact/behavior audit
-- explorer: GPT-5.6 Luna, high, read-only — repository evidence and code paths
-- worker: GPT-5.6 Luna, max — bounded implementation and batch changes
-- tester: GPT-5.6 Luna, high — reproduction, tests, builds, and validation
-- researcher: GPT-5.6 Luna, high, read-only — primary-source technical research
-- solver: GPT-5.6 Sol, high — coupled implementation and difficult debugging
+- auditor: GPT-6 Luna, max, read-only — independent fact/behavior audit
+- explorer: GPT-6 Luna, high, read-only — repository evidence and code paths
+- worker: GPT-6 Luna, max — bounded implementation and batch changes
+- tester: GPT-6 Luna, high — reproduction, tests, builds, and validation
+- researcher: GPT-6 Luna, high, read-only — primary-source technical research
+- solver: GPT-6 Sol, high — coupled implementation and difficult debugging
 - reviewer: GPT-6 Astra, low, read-only — R2 diff or R3 design review
 - reviewer_high: GPT-6 Astra, high, read-only — independent R3 final review
 
-These are exact custom-agent names, not labels. Always spawn the exact role; a
-requested model/effort does not override that role's TOML. Before consuming a
-child report, run `scripts/pro_guard.py attest` against the exact full
-thread/session ID and rollout JSONL. The guard requires one unambiguous
-`session_meta`, a canonical child `agent_path` of `/root/<exact-role>` (with every
-non-null role field agreeing), or an unambiguous user/root session with no child
-path. Authoritative `turn_context` model/effort must match the selected role TOML.
-Missing, duplicate, malformed, ambiguous, or mismatched evidence blocks. The
-check validates local evidence only; it is not cryptographic or tamper-proof.
+Use the named custom roles and their configured models; a requested model/effort
+does not override a role's TOML. Do not run rollout identity/model attestation
+for every child report or make it a phase or acceptance gate. If actual role or
+configuration drift is suspected, `scripts/pro_guard.py attest` remains an
+optional local diagnostic, not security authentication.
 
 ## Auditor gate
 
-Before implementation on R1-R3, the auditor independently challenges material
-user factual assumptions and the proposed fix against repository evidence. It
-classifies each material claim as `CONFIRMED`, `PARTIALLY_CONFIRMED`,
-`CONTRADICTED`, or `UNKNOWN`, then returns:
+Before implementation on R1-R3, the auditor separates the user's observation,
+causal explanation or proposed mechanism, and desired outcome. Check each
+material claim against the actual implementation and available reproduction or
+tests; look for a counterexample, an alternative cause, and adjacent modes that
+already behave correctly. Classify claims as `CONFIRMED`,
+`PARTIALLY_CONFIRMED`, `CONTRADICTED`, or `UNKNOWN`, then return:
 
 1. a concise claim ledger with evidence;
 2. `CLEAR` or `BLOCK` for the conflict gate;
-3. a behavior contract covering observable behavior, invariants, non-goals, and
-   acceptance evidence; and
+3. a behavior contract covering expected and unchanged behavior, relevant
+   mode/state variants, user-visible feedback, non-goals, and concrete acceptance
+   examples; and
 4. residual uncertainty.
 
 A semantic conflict is material when the requested mechanism would not produce
-the requested behavior, violates an established invariant, or relies on a
-contradicted/unresolved fact that can change the outcome. A `BLOCK` stops
-implementation until the root resolves it with the user or stronger evidence.
+the desired behavior, would change an already-correct adjacent behavior, or
+relies on a contradicted/unresolved fact that can change the outcome. A `BLOCK`
+stops implementation until the root resolves it with the user or stronger
+evidence. Non-material unknowns do not block. The root checks the contract
+against the user's intent before assigning a writer.
 
 ## R0-R3 routing
 
@@ -119,6 +120,8 @@ Use the strict phases `draft`, `audited`, `designed`, `implementing`, `testing`,
 Every mutation uses the transaction lock, atomic replacement, and expected
 revision CAS. Task slugs and canonical containment are validated; linked
 worktrees and paths with spaces are supported; symlink/reparse redirects fail.
+Existing v2.1 state records remain readable and upgrade to v2.2 on the next
+successful CAS write. Reject unknown future state versions without writing.
 Recovery validates repository identity, branch, HEAD, and status fingerprint.
 Changed evidence makes previous acceptance stale. Candidate acceptance binds
 path, byte size, SHA-256, and dirty fingerprint. Monitoring stores both an
@@ -163,9 +166,9 @@ gate requires a bound candidate; moving `manual_pending` to `complete` requires
 
 ## Guard and test ladder
 
-The guard commands are `attest`, `state-init`, `state-record-role`,
-`state-update`, `state-transition`, `state-recover`, `monitor-tick`, and
-`evidence-check`; use
+The guard commands are `state-init`, `state-update`, `state-transition`,
+`state-recover`, `monitor-tick`, and `evidence-check`; `attest` and
+`state-record-role` are optional drift diagnostics, never routine gates. Use
 `--help` for exact arguments. Run guard unit tests first, profile/policy parity
 second, installer syntax/install/upgrade/idempotence third, then the complete
 repository suite. Preserve failing evidence and rerun the affected rung before

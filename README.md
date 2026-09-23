@@ -1,6 +1,6 @@
-# Codex：Sol + Luna + Astra Pro v2.1 编排
+# Codex：Sol + Luna + Astra Pro v2.2 编排
 
-这套配置用固定的 GPT-5.6 Sol High 根代理保持整条任务的架构判断和
+这套配置用固定的 GPT-6 Sol High 根代理保持整条任务的架构判断和
 prompt cache 连续性，再按风险选择 Luna、Sol 与 Astra 专职角色。不要在任务中途建议
 切换 root 模型或推理强度。
 
@@ -12,20 +12,21 @@ prompt cache 连续性，再按风险选择 Luna、Sol 与 Astra 专职角色。
 
 | 角色 | 模型 / 推理 | 权限 | 职责 |
 | --- | --- | --- | --- |
-| root | GPT-5.6 Sol / high | 工作区 | 风险分级、架构、拆分、集成和最终验收 |
-| auditor | GPT-5.6 Luna / max | 只读 | 实现前核查事实、挑战方案、形成行为契约 |
-| explorer | GPT-5.6 Luna / high | 只读 | 搜索和真实代码路径梳理 |
-| worker | GPT-5.6 Luna / max | 工作区 | 边界清晰的实现和批量修改 |
-| tester | GPT-5.6 Luna / high | 工作区 | 复现、测试、构建和验证 |
-| researcher | GPT-5.6 Luna / high | 只读 | 权威资料核对 |
-| solver | GPT-5.6 Sol / high | 工作区 | 强耦合实现、跨文件重构和疑难调试 |
+| root | GPT-6 Sol / high | 工作区 | 风险分级、架构、拆分、集成和最终验收 |
+| auditor | GPT-6 Luna / max | 只读 | 实现前核查事实、挑战方案、形成行为契约 |
+| explorer | GPT-6 Luna / high | 只读 | 搜索和真实代码路径梳理 |
+| worker | GPT-6 Luna / max | 工作区 | 边界清晰的实现和批量修改 |
+| tester | GPT-6 Luna / high | 工作区 | 复现、测试、构建和验证 |
+| researcher | GPT-6 Luna / high | 只读 | 权威资料核对 |
+| solver | GPT-6 Sol / high | 工作区 | 强耦合实现、跨文件重构和疑难调试 |
 | reviewer | GPT-6 Astra / low | 只读 | R2 diff 审查或 R3 实现前设计审查 |
 | reviewer_high | GPT-6 Astra / high | 只读 | R3 独立终审 |
 
-auditor 必须把关键事实归为 `CONFIRMED`、`PARTIALLY_CONFIRMED`、
-`CONTRADICTED` 或 `UNKNOWN`，并输出可观察行为、不变量、非目标和验收证据。
-若用户假设、期望行为和拟议修复之间存在实质语义冲突，流程在实现前阻塞，由 root
-用更强证据或用户确认解决。
+auditor 先区分用户观察、原因推测或拟议修复、期望结果，核对真实代码路径、可安全
+复现的证据以及相邻模式是否已正常工作；主动寻找反例和替代原因。关键事实归为
+`CONFIRMED`、`PARTIALLY_CONFIRMED`、`CONTRADICTED` 或 `UNKNOWN`，并输出
+预期与应保持不变的行为、相关状态/模式、用户可见反馈及具体验收样例。只有实质
+语义冲突才在实现前阻塞，由 root 用更强证据或用户确认解决。
 
 ## R0-R3 风险路由
 
@@ -44,41 +45,39 @@ R1 通常由 worker 写入；R2 依耦合度选 worker 或 solver；R3 由 solve
 
 | Profile | 配置差异 | 最大并发子任务 |
 | --- | --- | ---: |
-| `pro` | 完整 Pro v2.1 角色 | 4 |
+| `pro` | 完整 Pro v2.2 角色 | 4 |
 | `pro-max-2-subagents` | 仅降低并发，其他文件和角色完全一致 | 2 |
 
 两个 profile 都捆绑了仅使用 Python 标准库的 `pro_guard.py` 与严格
 `policy.json`；除并发上限 4/2 外，配置、角色、skill、guard 与 policy 必须逐字一致。
 
-## 失败即关闭的角色证据
+## 按需角色诊断
 
-委派时只能使用 `auditor`、`explorer`、`researcher`、`worker`、`tester`、
-`solver`、`reviewer`、`reviewer_high` 这些精确名称。消费报告前，用 Python 3.11+
-对一个完整 thread/session ID 的 rollout JSONL 执行 `pro_guard.py attest`。guard
-要求唯一 `session_meta`；子代理由规范的 `/root/<精确角色>` agent path 解析，root
-由无 child path 的 user/root session 解析，任何非空 role 字段都必须一致。该 session 的权威
-`turn_context` 模型/effort 与角色 TOML 一致；缺失、重复、格式错误、歧义或不匹配
-都会阻塞。该机制只是本地证据校验，不是防篡改或密码学认证。
+委派时优先使用配置好的 `auditor`、`explorer`、`researcher`、`worker`、
+`tester`、`solver`、`reviewer`、`reviewer_high` 角色。普通任务不核对每份报告
+的 rollout 身份、模型或 effort，也不因此阻塞阶段推进。只有怀疑角色或配置漂移
+时，才按需用 Python 3.11+ 运行 `pro_guard.py attest` 排查；它只是本地证据
+诊断，不是安全认证。
 
 硬上限按 UTF-8 字节计：子代理报告 8192、转发的工具摘录 20480、root 阶段/恢复
 摘要 12288。禁止静默截断；超限内容必须阻塞，或改成由 guard 验证的仓库内
 路径、SHA-256 和字节数引用。
 
-典型调用（在已安装项目中）：
+长任务的典型状态调用（在已安装项目中）：
 
 ```powershell
-python .agents/skills/astra-orchestrator/scripts/pro_guard.py attest `
-  --rollout <rollout.jsonl-or-directory> --session <full-session-id> `
-  --role reviewer_high --profile-root .
 python .agents/skills/astra-orchestrator/scripts/pro_guard.py state-init `
   --repo . --task <lowercase-task-slug> --risk R3 `
   --deadline 2026-09-22T00:00:00Z --budget 4
 ```
 
-后续用 `state-record-role` 写入已核验角色，以 `state-transition` 携带
-`--expected-revision` 推进；用 `state-update` 记录活跃 child ID、文件所有权、
+后续用 `state-transition` 携带 `--expected-revision` 推进；用 `state-update`
+记录活跃 child ID、文件所有权、
 checks 和 next action；恢复用 `state-recover`，每次监控消费用
 `monitor-tick`。命令输出 JSON；失败返回非零且不推进状态。
+`attest` 与 `state-record-role` 仅供按需排查漂移，不是状态推进的前置条件。
+v2.2 guard 可以读取已有的 v2.1 状态；下一次 CAS 校验通过并成功写入时原子升级
+为 v2.2。未来未知版本会被拒绝，不会被降级或覆盖。
 
 恢复时若仍有继承的 active child，会进入 `blocked` 对账状态；更新后的仓库快照允许
 显式清空该集合，但清空前不能选择新 writer。非桌面任务可在没有 candidate 的情况下
@@ -87,8 +86,11 @@ checks 和 next action；恢复用 `state-recover`，每次监控消费用
 
 ## 安装
 
-前置条件是 Codex CLI、桌面端或 IDE 扩展、可用的 Astra/Luna/Sol 权限，以及一个
-不同于本安装仓库的目标项目。
+前置条件是支持 GPT-6 Sol/Luna 的 Codex CLI、桌面端或 IDE 扩展、可用的
+Astra/Luna/Sol 权限，以及一个不同于本安装仓库的目标项目。安装前先在当前账号的
+模型列表确认 `gpt-6-sol` 与 `gpt-6-luna` 都可选；仅有 API 模型发布不代表该账号
+已获得 Codex 使用权限。Codex CLI 0.156.1 将两者加入模型选择器，实际可用性仍取决于
+[客户端版本与账号灰度](https://learn.chatgpt.com/docs/changelog)。
 
 Windows PowerShell：
 
